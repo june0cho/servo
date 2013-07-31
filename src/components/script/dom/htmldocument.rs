@@ -12,6 +12,7 @@ use dom::node::{AbstractNode, ScriptView};
 use dom::window::Window;
 
 use js::jsapi::{JSObject, JSContext};
+use servo_util::tree::{TreeUtils};
 
 use servo_util::tree::TreeUtils;
 
@@ -64,7 +65,16 @@ impl HTMLDocument {
     }
 
     pub fn GetHead(&self) -> Option<AbstractNode<ScriptView>> {
-        None
+        let mut headNode:Option<AbstractNode<ScriptView>> = None;
+        let _ = for self.parent.root.traverse_preorder |child| {
+            if child.is_head_element() {
+                match headNode {
+                    Some(_val) => {},
+                    None() => { headNode = Some(child); break; }
+                }
+            }
+        };
+        headNode 
     }
 
     pub fn Images(&self) -> @mut HTMLCollection {
