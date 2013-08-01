@@ -9,7 +9,7 @@ use dom::bindings::utils::WrapperCache;
 use dom::bindings;
 use dom::characterdata::CharacterData;
 use dom::document::AbstractDocument;
-use dom::element::{Element, ElementTypeId, HTMLHeadElementTypeId, HTMLTitleElementTypeId, HTMLImageElement, HTMLImageElementTypeId, HTMLIframeElementTypeId, HTMLIframeElement};
+use dom::element::{Element, ElementTypeId, HTMLImageElement, HTMLImageElementTypeId, HTMLIframeElementTypeId, HTMLIframeElement};
 use dom::element::{HTMLStyleElementTypeId};
 
 use std::cast;
@@ -338,14 +338,6 @@ impl<'self, View> AbstractNode<View> {
             fail!(~"node is not an element");
         }
         self.transmute_mut(f)
-    }
-
-    pub fn is_head_element(self) -> bool {
-        self.type_id() == ElementNodeTypeId(HTMLHeadElementTypeId)
-    }
-
-    pub fn is_title_element(self) -> bool {
-        self.type_id() == ElementNodeTypeId(HTMLTitleElementTypeId)
     }
 
     pub fn is_image_element(self) -> bool {

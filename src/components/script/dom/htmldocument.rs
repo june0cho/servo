@@ -8,8 +8,9 @@ use dom::bindings::utils::{CacheableWrapper, BindingObject, WrapperCache};
 use dom::document::{AbstractDocument, Document, WrappableDocument, HTML};
 use dom::element::Element;
 use dom::htmlcollection::HTMLCollection;
-use dom::node::{AbstractNode, ScriptView};
+use dom::node::{AbstractNode, ScriptView, ElementNodeTypeId};
 use dom::window::Window;
+use dom::element::HTMLHeadElementTypeId;
 
 use js::jsapi::{JSObject, JSContext};
 use servo_util::tree::{TreeUtils};
@@ -19,6 +20,8 @@ use servo_util::tree::TreeUtils;
 use std::libc;
 use std::ptr;
 use std::str::eq_slice;
+
+use std;
 
 pub struct HTMLDocument {
     parent: Document
@@ -67,11 +70,9 @@ impl HTMLDocument {
     pub fn GetHead(&self) -> Option<AbstractNode<ScriptView>> {
         let mut headNode:Option<AbstractNode<ScriptView>> = None;
         let _ = for self.parent.root.traverse_preorder |child| {
-            if child.is_head_element() {
-                match headNode {
-                    Some(_val) => {},
-                    None() => { headNode = Some(child); break; }
-                }
+            if child.type_id() == ElementNodeTypeId(HTMLHeadElementTypeId) {
+                headNode = Some(child);
+                break;
             }
         };
         headNode 
@@ -142,6 +143,7 @@ impl HTMLDocument {
     }
 
     pub fn SetFgColor(&self, _color: &DOMString) {
+        std::io::println("set color called");
     }
 
     pub fn LinkColor(&self) -> DOMString {

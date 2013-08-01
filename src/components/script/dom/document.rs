@@ -5,11 +5,11 @@
 use dom::bindings::codegen::DocumentBinding;
 use dom::bindings::utils::{DOMString, WrapperCache, ErrorResult, null_string};
 use dom::bindings::utils::{BindingObject, CacheableWrapper, rust_box, DerivedWrapper};
-use dom::element::{HTMLHtmlElement, HTMLHtmlElementTypeId, Element};
+use dom::element::{HTMLHtmlElement, HTMLHtmlElementTypeId, Element, HTMLTitleElementTypeId};
 use dom::event::Event;
 use dom::htmlcollection::HTMLCollection;
 use dom::htmldocument::HTMLDocument;
-use dom::node::{AbstractNode, ScriptView, Node};
+use dom::node::{AbstractNode, ScriptView, Node, ElementNodeTypeId};
 use dom::window::Window;
 use dom::windowproxy::WindowProxy;
 
@@ -285,7 +285,7 @@ impl Document {
     pub fn Title(&self) -> DOMString {
         let mut title:DOMString = null_string;
         let _ = for self.root.traverse_preorder |child| {
-            if child.is_title_element() {
+            if child.type_id() == ElementNodeTypeId(HTMLTitleElementTypeId) {
                 for child.children().advance |text_child| {
                     do text_child.with_imm_text() |text| {
                         title = text.parent.GetData();
@@ -299,7 +299,7 @@ impl Document {
 
     pub fn SetTitle(&self, _title: &DOMString, _rv: &mut ErrorResult) {
         let _ = for self.root.traverse_preorder |child| {
-            if child.is_title_element() {
+            if child.type_id() == ElementNodeTypeId(HTMLTitleElementTypeId) {
                 for child.children().advance |text_child| {
                     do text_child.with_mut_text() |text| {
                         text.parent.SetData((*_title).clone());
