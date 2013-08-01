@@ -283,7 +283,18 @@ impl Document {
     }
 
     pub fn Title(&self) -> DOMString {
-        null_string
+        let mut title:DOMString = null_string;
+        let _ = for self.root.traverse_preorder |child| {
+            if child.is_title_element() {
+                for child.children().advance |text_child| {
+                    do text_child.with_imm_text() |text| {
+                        title = text.parent.GetData();
+                    }
+                }
+            }
+        };
+        debug!("data:%?", title);
+        title
     }
 
     pub fn SetTitle(&self, _title: &DOMString, _rv: &mut ErrorResult) {

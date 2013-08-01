@@ -9,7 +9,7 @@ use dom::bindings::utils::WrapperCache;
 use dom::bindings;
 use dom::characterdata::CharacterData;
 use dom::document::AbstractDocument;
-use dom::element::{Element, ElementTypeId, HTMLHeadElementTypeId, HTMLImageElement, HTMLImageElementTypeId, HTMLIframeElementTypeId, HTMLIframeElement};
+use dom::element::{Element, ElementTypeId, HTMLHeadElementTypeId, HTMLTitleElementTypeId, HTMLImageElement, HTMLImageElementTypeId, HTMLIframeElementTypeId, HTMLIframeElement};
 use dom::element::{HTMLStyleElementTypeId};
 
 use std::cast;
@@ -310,6 +310,12 @@ impl<'self, View> AbstractNode<View> {
         }
         self.transmute(f)
     }
+    pub fn with_mut_text<R>(self, f: &fn(&mut Text) -> R) -> R {
+        if !self.is_text() {
+            fail!(~"node is not text");
+        }
+        self.transmute_mut(f)
+    }
 
     pub fn is_element(self) -> bool {
         match self.type_id() {
@@ -336,6 +342,10 @@ impl<'self, View> AbstractNode<View> {
 
     pub fn is_head_element(self) -> bool {
         self.type_id() == ElementNodeTypeId(HTMLHeadElementTypeId)
+    }
+
+    pub fn is_title_element(self) -> bool {
+        self.type_id() == ElementNodeTypeId(HTMLTitleElementTypeId)
     }
 
     pub fn is_image_element(self) -> bool {
