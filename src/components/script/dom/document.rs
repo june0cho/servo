@@ -298,6 +298,15 @@ impl Document {
     }
 
     pub fn SetTitle(&self, _title: &DOMString, _rv: &mut ErrorResult) {
+        let _ = for self.root.traverse_preorder |child| {
+            if child.is_title_element() {
+                for child.children().advance |text_child| {
+                    do text_child.with_mut_text() |text| {
+                        text.parent.SetData((*_title).clone());
+                    }
+                }
+            }
+        };
     }
 
     pub fn Dir(&self) -> DOMString {

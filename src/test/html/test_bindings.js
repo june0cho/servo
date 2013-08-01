@@ -96,10 +96,13 @@ window.alert(tags.length);
 window.alert(tags[0]);
 window.alert(tags[0].tagName);
 
-window.alert("HTMLElement:");
+window.alert("Document:");
 let head = document.head;
 window.alert(head);
 window.alert(head.tagName);
+window.alert(document.title);
+document.title="changed title";
+window.alert(document.title);
 
 window.alert("DOMParser:");
 window.alert(DOMParser);
