@@ -310,6 +310,7 @@ impl<'self, View> AbstractNode<View> {
         }
         self.transmute(f)
     }
+
     pub fn with_mut_text<R>(self, f: &fn(&mut Text) -> R) -> R {
         if !self.is_text() {
             fail!(~"node is not text");

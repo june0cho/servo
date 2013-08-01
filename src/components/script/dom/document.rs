@@ -3,7 +3,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 use dom::bindings::codegen::DocumentBinding;
-use dom::bindings::utils::{DOMString, WrapperCache, ErrorResult, null_string};
+use dom::bindings::utils::{DOMString, WrapperCache, ErrorResult, null_string, str};
 use dom::bindings::utils::{BindingObject, CacheableWrapper, rust_box, DerivedWrapper};
 use dom::element::{HTMLHtmlElement, HTMLHtmlElementTypeId, Element, HTMLTitleElementTypeId};
 use dom::event::Event;
@@ -283,26 +283,40 @@ impl Document {
     }
 
     pub fn Title(&self) -> DOMString {
-        let mut title:DOMString = null_string;
-        let _ = for self.root.traverse_preorder |child| {
-            if child.type_id() == ElementNodeTypeId(HTMLTitleElementTypeId) {
-                for child.children().advance |text_child| {
-                    do text_child.with_imm_text() |text| {
-                        title = text.parent.GetData();
+        let mut title = ~"";
+        match self.doctype {
+            SVG => {
+                fail!("no SVG document yet")
+            },
+            _ => {
+                let _ = for self.root.traverse_preorder |node| {
+                    if node.type_id() == ElementNodeTypeId(HTMLTitleElementTypeId) {
+                        for node.children().advance |child| {
+                            if child.is_text(){
+                                do child.with_imm_text() |text| {
+                                    let s = text.parent.GetData();
+                                    title = title + s.to_str();
+                                }
+                            }
+                        }
+                        break;
                     }
-                }
+                };
             }
-        };
-        debug!("data:%?", title);
-        title
+        }
+        let v:~[&str] = title.word_iter().collect();
+        title = v.connect(" ");
+
+        title = title.trim().to_owned();
+        str(title)
     }
 
-    pub fn SetTitle(&self, _title: &DOMString, _rv: &mut ErrorResult) {
+    pub fn SetTitle(&self, title: &DOMString, _rv: &mut ErrorResult) {
         let _ = for self.root.traverse_preorder |child| {
             if child.type_id() == ElementNodeTypeId(HTMLTitleElementTypeId) {
                 for child.children().advance |text_child| {
                     do text_child.with_mut_text() |text| {
-                        text.parent.SetData((*_title).clone());
+                        text.parent.SetData((*title).clone());
                     }
                 }
             }

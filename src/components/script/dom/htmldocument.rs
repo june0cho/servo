@@ -6,22 +6,18 @@ use dom::bindings::codegen::HTMLDocumentBinding;
 use dom::bindings::utils::{DOMString, ErrorResult, null_string};
 use dom::bindings::utils::{CacheableWrapper, BindingObject, WrapperCache};
 use dom::document::{AbstractDocument, Document, WrappableDocument, HTML};
-use dom::element::Element;
+use dom::element::{Element, HTMLHeadElementTypeId};
 use dom::htmlcollection::HTMLCollection;
 use dom::node::{AbstractNode, ScriptView, ElementNodeTypeId};
 use dom::window::Window;
-use dom::element::HTMLHeadElementTypeId;
 
 use js::jsapi::{JSObject, JSContext};
-use servo_util::tree::{TreeUtils};
 
 use servo_util::tree::TreeUtils;
 
 use std::libc;
 use std::ptr;
 use std::str::eq_slice;
-
-use std;
 
 pub struct HTMLDocument {
     parent: Document
@@ -143,7 +139,6 @@ impl HTMLDocument {
     }
 
     pub fn SetFgColor(&self, _color: &DOMString) {
-        std::io::println("set color called");
     }
 
     pub fn LinkColor(&self) -> DOMString {
