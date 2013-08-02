@@ -5,11 +5,11 @@
 use dom::bindings::codegen::DocumentBinding;
 use dom::bindings::utils::{DOMString, WrapperCache, ErrorResult, null_string, str};
 use dom::bindings::utils::{BindingObject, CacheableWrapper, rust_box, DerivedWrapper};
-use dom::element::{HTMLHtmlElement, HTMLHtmlElementTypeId, Element, HTMLTitleElementTypeId};
+use dom::element::{HTMLHtmlElement, HTMLHtmlElementTypeId, Element, HTMLHeadElementTypeId, HTMLTitleElementTypeId};
 use dom::event::Event;
 use dom::htmlcollection::HTMLCollection;
 use dom::htmldocument::HTMLDocument;
-use dom::node::{AbstractNode, ScriptView, Node, ElementNodeTypeId};
+use dom::node::{AbstractNode, ScriptView, Node, ElementNodeTypeId, Text};
 use dom::window::Window;
 use dom::windowproxy::WindowProxy;
 
@@ -306,21 +306,48 @@ impl Document {
         }
         let v:~[&str] = title.word_iter().collect();
         title = v.connect(" ");
-
         title = title.trim().to_owned();
         str(title)
     }
 
     pub fn SetTitle(&self, title: &DOMString, _rv: &mut ErrorResult) {
-        let _ = for self.root.traverse_preorder |child| {
-            if child.type_id() == ElementNodeTypeId(HTMLTitleElementTypeId) {
-                for child.children().advance |text_child| {
-                    do text_child.with_mut_text() |text| {
-                        text.parent.SetData((*title).clone());
+        match self.doctype {
+            SVG => {
+                fail!("no SVG document yet")
+            },
+            _ => {
+                let (_scope, cx) = self.get_scope_and_cx();
+                let _ = for self.root.traverse_preorder |node| {
+                    if node.type_id() == ElementNodeTypeId(HTMLHeadElementTypeId) {
+                        let mut has_title = false;
+                        for node.children().advance |child| {
+                            if child.type_id() == ElementNodeTypeId(HTMLTitleElementTypeId){
+                                has_title = true;
+                                for child.children().advance |title_child| {
+                                    child.remove_child(title_child);
+                                }
+                                let new_text = unsafe { 
+                                    Node::as_abstract_node(cx, ~Text::new(title.to_str())) 
+                                };
+                                child.add_child(new_text);
+                                break;
+                            }
+                        }
+                        if !has_title {
+                            let new_title = unsafe {
+                                Node::as_abstract_node(cx, ~Element::new(HTMLTitleElementTypeId, ~"title"))
+                            };
+                            let new_text = unsafe {
+                                Node::as_abstract_node(cx, ~Text::new(title.to_str()))
+                            };
+                            new_title.add_child(new_text);
+                            node.add_child(new_title);
+                        }
+                        break;
                     }
-                }
+                };
             }
-        };
+        }
     }
 
     pub fn Dir(&self) -> DOMString {
