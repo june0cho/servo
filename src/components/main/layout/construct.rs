@@ -28,7 +28,8 @@ use layout::context::LayoutContext;
 use layout::float_context::FloatType;
 use layout::flow::{Flow, FlowData, MutableFlowUtils};
 use layout::inline::InlineFlow;
-use layout::table::{TableFlow};
+use layout::table::{TableFlow, TableColGroupFlow};
+use layout::table_wrapper::{TableWrapperFlow};
 use layout::tablecell::{TableCellFlow};
 use layout::text::TextRunScanner;
 use layout::util::LayoutDataAccess;
@@ -363,12 +364,41 @@ impl<'self> FlowConstructor<'self> {
         flow
     }
 
+    fn build_flow_for_table_wrapper(&mut self, node: LayoutNode) -> ~Flow: {
+        let base = FlowData::new(self.next_flow_id(), node);
+        let box = self.build_box_for_node(node);
+        let mut flow = ~TableWrapperFlow::from_box(base, box) as ~Flow:;
+        self.build_children_of_block_flow(&mut flow, node);
+        flow
+    }
+
     fn build_flow_for_table(&mut self, node: LayoutNode) -> ~Flow: {
         let base = FlowData::new(self.next_flow_id(), node);
         let box = self.build_box_for_node(node);
         let is_table_row = node.type_id() == ElementNodeTypeId(HTMLTableRowElementTypeId);
         let mut flow = ~TableFlow::from_box(base, box, is_table_row) as ~Flow:;
         self.build_children_of_block_flow(&mut flow, node);
+        flow
+    }
+
+    fn build_flow_for_table_columns(&mut self, node: LayoutNode) -> ~Flow: {
+        let base = FlowData::new(self.next_flow_id(), node);
+        let box = self.build_box_for_node(node);
+        let mut col_boxes = ~[];
+        for kid in node.children() {
+            match kid.swap_out_construction_result() {
+                ConstructionItemConstructionResult(InlineBoxesConstructionItem(
+                        InlineBoxesConstructionResult {
+                            splits: _,
+                            boxes: boxes
+                        })) => {
+
+                    col_boxes.push_all_move(boxes)
+                }
+                _ => {}
+            }
+        }
+        let mut flow = ~TableColGroupFlow::from_box(base, box, col_boxes) as ~Flow:;
         flow
     }
 
@@ -513,12 +543,27 @@ impl<'self> PostorderNodeMutTraversal for FlowConstructor<'self> {
                 node.set_flow_construction_result(construction_result)
             }
 
-            (display::table_cell, float::none) => {
+            (display::table, float::none) => {
+                let flow = self.build_flow_for_table_wrapper(node);
+                node.set_flow_construction_result(FlowConstructionResult(flow))
+            }
+
+            (display::table_column_group, float::none) => {
+                let flow = self.build_flow_for_table_columns(node);
+                node.set_flow_construction_result(FlowConstructionResult(flow))
+            }
+
+            (display::table_column, float::none) => {
+                let construction_result = self.build_boxes_for_replaced_inline_content(node);
+                node.set_flow_construction_result(construction_result)
+            }
+
+            (display::table_cell, _) => {
                 let flow = self.build_flow_for_table_cell(node);
                 node.set_flow_construction_result(FlowConstructionResult(flow))
             }
 
-            (display::table, _) | (display::table_row, _) | (display::table_row_group, _) | (display::table_caption, _) => {
+            (display::table_row, _) | (display::table_row_group, _)  => {
                 let flow = self.build_flow_for_table(node);
                 node.set_flow_construction_result(FlowConstructionResult(flow))
             }

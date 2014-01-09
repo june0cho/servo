@@ -7,7 +7,7 @@
 use layout::box::Box;
 use layout::context::LayoutContext;
 use layout::display_list_builder::{DisplayListBuilder, ExtraDisplayListData};
-use layout::flow::{TableColGroupFlowClass, TableFlowClass, FlowClass, Flow, FlowData, ImmutableFlowUtils};
+use layout::flow::{TableWrapperFlowClass, FlowClass, Flow, FlowData, ImmutableFlowUtils};
 use layout::flow;
 use layout::model::{MaybeAuto, Specified, Auto, specified_or_none, specified};
 use layout::float_context::{FloatContext, PlacementInfo, Invalid, FloatType};
@@ -17,7 +17,6 @@ use geom::{Point2D, Rect, SideOffsets2D};
 use gfx::display_list::DisplayList;
 use servo_util::geometry::Au;
 use servo_util::geometry;
-use std::num::Zero;
 
 /// Information specific to floated blocks.
 pub struct FloatedBlockInfo {
@@ -48,127 +47,55 @@ impl FloatedBlockInfo {
     }
 }
 
-pub struct TableColGroupFlow {
-    base: FlowData,
-    box: Option<Box>,
-    cols: ~[Box]
-}
-
-impl TableColGroupFlow {
-    pub fn new(base: FlowData) -> TableColGroupFlow {
-        TableColGroupFlow {
-            base: base,
-            box: None,
-            cols: ~[]
-        }
-    }
-
-    pub fn from_box(base: FlowData, box: Box, boxes: ~[Box]) -> TableColGroupFlow {
-        TableColGroupFlow {
-            base: base,
-            box: Some(box),
-            cols: boxes
-        }
-    }
-}
-
-impl Flow for TableColGroupFlow {
-    fn class(&self) -> FlowClass {
-        TableColGroupFlowClass
-    }
-
-    /* Recursively (bottom-up) determine the context's preferred and
-    minimum widths.  When called on this context, all child contexts
-    have had their min/pref widths set. This function must decide
-    min/pref widths based on child context widths and dimensions of
-    any boxes it is responsible for flowing.  */
-
-    fn bubble_widths(&mut self, _: &mut LayoutContext) {
-    }
-
-    /// Recursively (top-down) determines the actual width of child contexts and boxes. When called
-    /// on this context, the context has had its width set by the parent context.
-    ///
-    /// Dual boxes consume some width first, and the remainder is assigned to all child (block)
-    /// contexts.
-    fn assign_widths(&mut self, ctx: &mut LayoutContext) { }
-
-    fn assign_height(&mut self, ctx: &mut LayoutContext) { }
-
-    fn collapse_margins(&mut self,
-                        top_margin_collapsible: bool,
-                        first_in_flow: &mut bool,
-                        margin_top: &mut Au,
-                        top_offset: &mut Au,
-                        collapsing: &mut Au,
-                        collapsible: &mut Au) { }
-
-    fn debug_str(&self) -> ~str {
-        let txt = ~"TableColGroupFlow: ";
-        txt.append(match self.box {
-            Some(ref rb) => rb.debug_str(),
-            None => ~"",
-        })
-    }
-}
-
 /// A table formatting context.
-pub struct TableFlow {
+pub struct TableWrapperFlow {
     /// Data common to all flows.
     base: FlowData,
 
     /// The associated box.
     box: Option<Box>,
 
-    /// Whether this block flow is the root flow.
-    is_table_row: bool,
-
     /// Additional floating flow members.
     float: Option<~FloatedBlockInfo>
 }
 
-impl TableFlow {
-    pub fn new(base: FlowData) -> TableFlow {
-        TableFlow {
+impl TableWrapperFlow {
+    pub fn new(base: FlowData) -> TableWrapperFlow {
+        TableWrapperFlow {
             base: base,
             box: None,
-            is_table_row: false,
             float: None
         }
     }
 
-    pub fn from_box(base: FlowData, box: Box, is_table_row: bool) -> TableFlow {
-        TableFlow {
+    pub fn from_box(base: FlowData, box: Box) -> TableWrapperFlow {
+        TableWrapperFlow {
             base: base,
             box: Some(box),
-            is_table_row: is_table_row,
             float: None
         }
     }
 
-    pub fn float_from_box(base: FlowData, float_type: FloatType, box: Box) -> TableFlow {
-        TableFlow {
+    pub fn float_from_box(base: FlowData, float_type: FloatType, box: Box) -> TableWrapperFlow {
+        TableWrapperFlow {
             base: base,
             box: Some(box),
-            is_table_row: false,
             float: Some(~FloatedBlockInfo::new(float_type))
         }
     }
 
-    pub fn new_root(base: FlowData) -> TableFlow {
-        TableFlow {
+    pub fn new_root(base: FlowData) -> TableWrapperFlow {
+        TableWrapperFlow {
             base: base,
             box: None,
-            is_table_row: true,
             float: None
         }
     }
 
-    pub fn new_float(base: FlowData, float_type: FloatType) -> TableFlow {
-        TableFlow {
+    pub fn new_float(base: FlowData, float_type: FloatType) -> TableWrapperFlow {
+        TableWrapperFlow {
             base: base,
             box: None,
-            is_table_row: false,
             float: Some(~FloatedBlockInfo::new(float_type))
         }
     }
@@ -370,13 +297,6 @@ impl TableFlow {
             cur_y = cur_y - collapsing;
             child_node.position.origin.y = cur_y;
             cur_y = cur_y + child_node.position.size.height;
-            if self.is_table_row {
-                cur_y = cur_y - child_node.position.size.height;
-                max_y = geometry::max(max_y, child_node.position.size.height);
-            }
-        }
-        if self.is_table_row {
-            cur_y = cur_y + max_y;
         }
 
         // The bottom margin collapses with its last in-flow block-level child's bottom margin
@@ -590,12 +510,12 @@ impl TableFlow {
     }
 }
 
-impl Flow for TableFlow {
+impl Flow for TableWrapperFlow {
     fn class(&self) -> FlowClass {
-        TableFlowClass
+        TableWrapperFlowClass
     }
 
-    fn as_table<'a>(&'a mut self) -> &'a mut TableFlow {
+    fn as_table_wrapper<'a>(&'a mut self) -> &'a mut TableWrapperFlow {
         self
     }
 
@@ -616,14 +536,9 @@ impl Flow for TableFlow {
             assert!(child_ctx.starts_block_flow() || child_ctx.starts_inline_flow());
 
             let child_base = flow::mut_base(*child_ctx);
-            if self.is_table_row {
-                min_width = min_width.add(&child_base.min_width);
-                pref_width = pref_width.add(&child_base.pref_width);
-            } else{
-                min_width = geometry::max(min_width, child_base.min_width);
-                pref_width = geometry::max(pref_width, child_base.pref_width);
-                num_floats = num_floats + child_base.num_floats;
-            }
+            min_width = geometry::max(min_width, child_base.min_width);
+            pref_width = geometry::max(pref_width, child_base.pref_width);
+            num_floats = num_floats + child_base.num_floats;
         }
 
         if self.is_float() {
@@ -735,11 +650,6 @@ impl Flow for TableFlow {
             child_base.position.size.width = remaining_width;
             child_base.flags.set_inorder(has_inorder_children);
 
-            if self.is_table_row {
-                x_offset = x_offset + child_base.pref_width;
-                child_base.position.size.width = child_base.pref_width;
-            }
-
             if !child_base.flags.inorder() {
                 child_base.floats_in = FloatContext::new(0);
             }
@@ -811,17 +721,11 @@ impl Flow for TableFlow {
         *first_in_flow = false;
     }
 
-    fn mark_as_root(&mut self) {
-        self.is_table_row = true
-    }
-
     fn debug_str(&self) -> ~str {
         let txt = if self.is_float() {
             ~"FloatFlow: "
-        } else if self.is_table_row {
-            ~"TableFlow[Row]: " 
         } else {
-            ~"TableFlow: " 
+            ~"TableWrapperFlow: " 
         };
         txt.append(match self.box {
             Some(ref rb) => rb.debug_str(),

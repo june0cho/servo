@@ -34,6 +34,7 @@ use layout::float_context::{FloatContext, Invalid};
 use layout::incremental::RestyleDamage;
 use layout::inline::InlineFlow;
 use layout::table::{TableFlow};
+use layout::table_wrapper::{TableWrapperFlow};
 use layout::tablecell::{TableCellFlow};
 use layout::wrapper::LayoutNode;
 
@@ -74,6 +75,11 @@ pub trait Flow {
     /// If this is an inline flow, returns the underlying object. Fails otherwise.
     fn as_inline<'a>(&'a mut self) -> &'a mut InlineFlow {
         fail!("called as_inline() on a non-inline flow")
+    }
+
+    /// If this is a table flow, returns the underlying object. Fails otherwise.
+    fn as_table_wrapper<'a>(&'a mut self) -> &'a mut TableWrapperFlow {
+        fail!("called as_table_wrapper() on a non-table flow")
     }
 
     /// If this is a table flow, returns the underlying object. Fails otherwise.
@@ -229,7 +235,9 @@ pub enum FlowClass {
     BlockFlowClass,
     InlineBlockFlowClass,
     InlineFlowClass,
+    TableWrapperFlowClass,
     TableFlowClass,
+    TableColGroupFlowClass,
     TableCellFlowClass,
 }
 
@@ -462,7 +470,9 @@ impl<'self> ImmutableFlowUtils for &'self Flow {
     fn is_block_like(self) -> bool {
         match self.class() {
             BlockFlowClass => true,
-            AbsoluteFlowClass | InlineBlockFlowClass | InlineFlowClass | TableFlowClass | TableCellFlowClass => false,
+            AbsoluteFlowClass | InlineBlockFlowClass | InlineFlowClass | 
+            TableWrapperFlowClass | TableFlowClass | 
+            TableCellFlowClass | TableColGroupFlowClass => false,
         }
     }
 
@@ -474,7 +484,9 @@ impl<'self> ImmutableFlowUtils for &'self Flow {
     /// Returns true if this flow is a block flow, an inline-block flow, or a float flow.
     fn starts_block_flow(self) -> bool {
         match self.class() {
-            BlockFlowClass | InlineBlockFlowClass | TableFlowClass | TableCellFlowClass => true,
+            BlockFlowClass | InlineBlockFlowClass | 
+            TableWrapperFlowClass | TableFlowClass | 
+            TableCellFlowClass | TableColGroupFlowClass => true,
             AbsoluteFlowClass | InlineFlowClass => false,
         }
     }
@@ -484,7 +496,7 @@ impl<'self> ImmutableFlowUtils for &'self Flow {
         match self.class() {
             InlineFlowClass | TableCellFlowClass=> true,
             AbsoluteFlowClass | BlockFlowClass | InlineBlockFlowClass |
-            TableFlowClass => false,
+            TableWrapperFlowClass | TableFlowClass | TableColGroupFlowClass => false,
         }
     }
 
@@ -493,7 +505,8 @@ impl<'self> ImmutableFlowUtils for &'self Flow {
         match self.class() {
             TableCellFlowClass => true,
             AbsoluteFlowClass | BlockFlowClass | InlineBlockFlowClass |
-            InlineFlowClass | TableFlowClass => false,
+            InlineFlowClass | TableWrapperFlowClass | 
+            TableFlowClass | TableColGroupFlowClass => false,
         }
     }
 
@@ -601,7 +614,10 @@ impl<'self> MutableFlowUtils for &'self mut Flow {
             BlockFlowClass => self.as_block().build_display_list_block(builder, dirty, list),
             InlineFlowClass => self.as_inline().build_display_list_inline(builder, dirty, list),
             TableFlowClass => self.as_table().build_display_list_table(builder, dirty, list),
+            TableWrapperFlowClass => self.as_table_wrapper().build_display_list_table(builder, dirty, list),
             TableCellFlowClass => self.as_tablecell().build_display_list_table(builder, dirty, list),
+            // TableColGroupFlowClass doesn't have any box to display.
+            TableColGroupFlowClass => false,
             _ => fail!("Tried to build_display_list_recurse of flow: {:?}", self),
         };
 
