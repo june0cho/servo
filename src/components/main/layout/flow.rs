@@ -33,6 +33,8 @@ use layout::display_list_builder::{DisplayListBuilder, ExtraDisplayListData};
 use layout::float_context::{FloatContext, Invalid};
 use layout::incremental::RestyleDamage;
 use layout::inline::InlineFlow;
+use layout::table::{TableFlow};
+use layout::tablecell::{TableCellFlow};
 use layout::wrapper::LayoutNode;
 
 use extra::dlist::{DList, DListIterator, MutDListIterator};
@@ -72,6 +74,16 @@ pub trait Flow {
     /// If this is an inline flow, returns the underlying object. Fails otherwise.
     fn as_inline<'a>(&'a mut self) -> &'a mut InlineFlow {
         fail!("called as_inline() on a non-inline flow")
+    }
+
+    /// If this is a table flow, returns the underlying object. Fails otherwise.
+    fn as_table<'a>(&'a mut self) -> &'a mut TableFlow {
+        fail!("called as_table() on a non-table flow")
+    }
+
+    /// If this is a table flow, returns the underlying object. Fails otherwise.
+    fn as_tablecell<'a>(&'a mut self) -> &'a mut TableCellFlow {
+        fail!("called as_table() on a non-table flow")
     }
 
     // Main methods
@@ -164,6 +176,9 @@ pub trait ImmutableFlowUtils {
     /// Returns true if this flow is an inline flow.
     fn starts_inline_flow(self) -> bool;
 
+    /// Returns true if this flow is an table flow of table row.
+    fn is_table_cell(self) -> bool;
+
     /// Dumps the flow tree for debugging.
     fn dump(self);
 
@@ -215,6 +230,7 @@ pub enum FlowClass {
     InlineBlockFlowClass,
     InlineFlowClass,
     TableFlowClass,
+    TableCellFlowClass,
 }
 
 // Miscellaneous flows that are not yet implemented.
@@ -252,24 +268,6 @@ impl InlineBlockFlow {
 impl Flow for InlineBlockFlow {
     fn class(&self) -> FlowClass {
         InlineBlockFlowClass
-    }
-}
-
-pub struct TableFlow {
-    base: FlowData,
-}
-
-impl TableFlow {
-    pub fn new(base: FlowData) -> TableFlow {
-        TableFlow {
-            base: base,
-        }
-    }
-}
-
-impl Flow for TableFlow {
-    fn class(&self) -> FlowClass {
-        TableFlowClass
     }
 }
 
@@ -464,7 +462,7 @@ impl<'self> ImmutableFlowUtils for &'self Flow {
     fn is_block_like(self) -> bool {
         match self.class() {
             BlockFlowClass => true,
-            AbsoluteFlowClass | InlineBlockFlowClass | InlineFlowClass | TableFlowClass => false,
+            AbsoluteFlowClass | InlineBlockFlowClass | InlineFlowClass | TableFlowClass | TableCellFlowClass => false,
         }
     }
 
@@ -476,17 +474,26 @@ impl<'self> ImmutableFlowUtils for &'self Flow {
     /// Returns true if this flow is a block flow, an inline-block flow, or a float flow.
     fn starts_block_flow(self) -> bool {
         match self.class() {
-            BlockFlowClass | InlineBlockFlowClass => true,
-            AbsoluteFlowClass | InlineFlowClass | TableFlowClass => false,
+            BlockFlowClass | InlineBlockFlowClass | TableFlowClass | TableCellFlowClass => true,
+            AbsoluteFlowClass | InlineFlowClass => false,
         }
     }
 
     /// Returns true if this flow is a block flow, an inline flow, or a float flow.
     fn starts_inline_flow(self) -> bool {
         match self.class() {
-            InlineFlowClass => true,
+            InlineFlowClass | TableCellFlowClass=> true,
             AbsoluteFlowClass | BlockFlowClass | InlineBlockFlowClass |
             TableFlowClass => false,
+        }
+    }
+
+    /// Returns true if this flow is a table flow.
+    fn is_table_cell(self) -> bool {
+        match self.class() {
+            TableCellFlowClass => true,
+            AbsoluteFlowClass | BlockFlowClass | InlineBlockFlowClass |
+            InlineFlowClass | TableFlowClass => false,
         }
     }
 
@@ -593,6 +600,8 @@ impl<'self> MutableFlowUtils for &'self mut Flow {
         match self.class() {
             BlockFlowClass => self.as_block().build_display_list_block(builder, dirty, list),
             InlineFlowClass => self.as_inline().build_display_list_inline(builder, dirty, list),
+            TableFlowClass => self.as_table().build_display_list_table(builder, dirty, list),
+            TableCellFlowClass => self.as_tablecell().build_display_list_table(builder, dirty, list),
             _ => fail!("Tried to build_display_list_recurse of flow: {:?}", self),
         };
 

@@ -28,11 +28,13 @@ use layout::context::LayoutContext;
 use layout::float_context::FloatType;
 use layout::flow::{Flow, FlowData, MutableFlowUtils};
 use layout::inline::InlineFlow;
+use layout::table::{TableFlow};
+use layout::tablecell::{TableCellFlow};
 use layout::text::TextRunScanner;
 use layout::util::LayoutDataAccess;
 use layout::wrapper::{LayoutNode, PostorderNodeMutTraversal};
 
-use script::dom::element::{HTMLIframeElementTypeId, HTMLImageElementTypeId};
+use script::dom::element::{HTMLIframeElementTypeId, HTMLImageElementTypeId, HTMLTableRowElementTypeId};
 use script::dom::node::{CommentNodeTypeId, DoctypeNodeTypeId, DocumentFragmentNodeTypeId};
 use script::dom::node::{DocumentNodeTypeId, ElementNodeTypeId, TextNodeTypeId};
 use servo_util::slot::Slot;
@@ -361,6 +363,23 @@ impl<'self> FlowConstructor<'self> {
         flow
     }
 
+    fn build_flow_for_table(&mut self, node: LayoutNode) -> ~Flow: {
+        let base = FlowData::new(self.next_flow_id(), node);
+        let box = self.build_box_for_node(node);
+        let is_table_row = node.type_id() == ElementNodeTypeId(HTMLTableRowElementTypeId);
+        let mut flow = ~TableFlow::from_box(base, box, is_table_row) as ~Flow:;
+        self.build_children_of_block_flow(&mut flow, node);
+        flow
+    }
+
+    fn build_flow_for_table_cell(&mut self, node: LayoutNode) -> ~Flow: {
+        let base = FlowData::new(self.next_flow_id(), node);
+        let box = self.build_box_for_node(node);
+        let mut flow = ~TableCellFlow::from_box(base, box) as ~Flow:;
+        self.build_children_of_block_flow(&mut flow, node);
+        flow
+    }
+
     /// Concatenates the boxes of kids, adding in our own borders/padding/margins if necessary.
     /// Returns the `InlineBoxesConstructionResult`, if any. There will be no
     /// `InlineBoxesConstructionResult` if this node consisted entirely of ignorable whitespace.
@@ -492,6 +511,16 @@ impl<'self> PostorderNodeMutTraversal for FlowConstructor<'self> {
             (display::inline, float::none) => {
                 let construction_result = self.build_boxes_for_inline(node);
                 node.set_flow_construction_result(construction_result)
+            }
+
+            (display::table_cell, float::none) => {
+                let flow = self.build_flow_for_table_cell(node);
+                node.set_flow_construction_result(FlowConstructionResult(flow))
+            }
+
+            (display::table, _) | (display::table_row, _) | (display::table_row_group, _) | (display::table_caption, _) => {
+                let flow = self.build_flow_for_table(node);
+                node.set_flow_construction_result(FlowConstructionResult(flow))
             }
 
             // Block flows that are not floated contribute block flow construction results.

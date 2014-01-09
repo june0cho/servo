@@ -635,6 +635,8 @@ impl Flow for InlineFlow {
         self.base.min_width = min_width;
         self.base.pref_width = pref_width;
         self.base.num_floats = num_floats;
+
+        println!("INLINE: min_width:{} pref_width:{}", min_width, pref_width);
     }
 
     /// Recursively (top-down) determines the actual width of child contexts and boxes. When called
