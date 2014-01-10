@@ -4,7 +4,7 @@
 
 //! CSS block formatting contexts.
 
-use layout::box::Box;
+use layout::box::{Box, TableColBox};
 use layout::context::LayoutContext;
 use layout::display_list_builder::{DisplayListBuilder, ExtraDisplayListData};
 use layout::flow::{TableColGroupFlowClass, TableFlowClass, FlowClass, Flow, FlowData, ImmutableFlowUtils};
@@ -51,7 +51,8 @@ impl FloatedBlockInfo {
 pub struct TableColGroupFlow {
     base: FlowData,
     box: Option<Box>,
-    cols: ~[Box]
+    cols: ~[Box],
+    min_widths: ~[Au],
 }
 
 impl TableColGroupFlow {
@@ -59,7 +60,8 @@ impl TableColGroupFlow {
         TableColGroupFlow {
             base: base,
             box: None,
-            cols: ~[]
+            cols: ~[],
+            min_widths: ~[],
         }
     }
 
@@ -67,7 +69,8 @@ impl TableColGroupFlow {
         TableColGroupFlow {
             base: base,
             box: Some(box),
-            cols: boxes
+            cols: boxes,
+            min_widths: ~[],
         }
     }
 }
@@ -77,6 +80,10 @@ impl Flow for TableColGroupFlow {
         TableColGroupFlowClass
     }
 
+    fn as_table_colgroup<'a>(&'a mut self) -> &'a mut TableColGroupFlow {
+        self
+    }
+
     /* Recursively (bottom-up) determine the context's preferred and
     minimum widths.  When called on this context, all child contexts
     have had their min/pref widths set. This function must decide
@@ -84,6 +91,21 @@ impl Flow for TableColGroupFlow {
     any boxes it is responsible for flowing.  */
 
     fn bubble_widths(&mut self, _: &mut LayoutContext) {
+
+        let mut width_num = 0;
+        for box in self.cols.iter() {
+            let (width, _) = box.minimum_and_preferred_widths();
+            
+            let span:int = match box.specific {
+                TableColBox(col_box) => col_box.span.unwrap_or(1),
+                _ => fail!("Other box come out in TableColGroupFlow.")
+            };
+            for col_num in range(0, span) {
+                self.min_widths.push(width);
+                println!("***table columns : {}", width);
+            }
+        }
+
     }
 
     /// Recursively (top-down) determines the actual width of child contexts and boxes. When called

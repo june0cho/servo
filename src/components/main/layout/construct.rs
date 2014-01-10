@@ -23,10 +23,11 @@
 use css::node_style::StyledNode;
 use layout::block::BlockFlow;
 use layout::box::{Box, GenericBox, IframeBox, IframeBoxInfo, ImageBox, ImageBoxInfo};
+use layout::box::{TableColBox, TableColBoxInfo};
 use layout::box::{UnscannedTextBox, UnscannedTextBoxInfo};
 use layout::context::LayoutContext;
 use layout::float_context::FloatType;
-use layout::flow::{Flow, FlowData, MutableFlowUtils};
+use layout::flow::{Flow, FlowData, MutableFlowUtils, TableColData};
 use layout::inline::InlineFlow;
 use layout::table::{TableFlow, TableColGroupFlow};
 use layout::table_wrapper::{TableWrapperFlow};
@@ -35,7 +36,8 @@ use layout::text::TextRunScanner;
 use layout::util::LayoutDataAccess;
 use layout::wrapper::{LayoutNode, PostorderNodeMutTraversal};
 
-use script::dom::element::{HTMLIframeElementTypeId, HTMLImageElementTypeId, HTMLTableRowElementTypeId};
+use script::dom::element::{HTMLIframeElementTypeId, HTMLImageElementTypeId};
+use script::dom::element::{HTMLTableRowElementTypeId, HTMLTableColElementTypeId};
 use script::dom::node::{CommentNodeTypeId, DoctypeNodeTypeId, DocumentFragmentNodeTypeId};
 use script::dom::node::{DocumentNodeTypeId, ElementNodeTypeId, TextNodeTypeId};
 use servo_util::slot::Slot;
@@ -223,6 +225,7 @@ impl<'self> FlowConstructor<'self> {
                 }
             }
             ElementNodeTypeId(HTMLIframeElementTypeId) => IframeBox(IframeBoxInfo::new(&node)),
+            ElementNodeTypeId(HTMLTableColElementTypeId) => TableColBox(TableColBoxInfo::new(&node)),
             TextNodeTypeId => UnscannedTextBox(UnscannedTextBoxInfo::new(&node)),
             _ => GenericBox,
         };
@@ -365,7 +368,7 @@ impl<'self> FlowConstructor<'self> {
     }
 
     fn build_flow_for_table_wrapper(&mut self, node: LayoutNode) -> ~Flow: {
-        let base = FlowData::new(self.next_flow_id(), node);
+        let base = FlowData::new_on_table(self.next_flow_id(), node);
         let box = self.build_box_for_node(node);
         let mut flow = ~TableWrapperFlow::from_box(base, box) as ~Flow:;
         self.build_children_of_block_flow(&mut flow, node);
@@ -373,7 +376,7 @@ impl<'self> FlowConstructor<'self> {
     }
 
     fn build_flow_for_table(&mut self, node: LayoutNode) -> ~Flow: {
-        let base = FlowData::new(self.next_flow_id(), node);
+        let base = FlowData::new_on_table(self.next_flow_id(), node);
         let box = self.build_box_for_node(node);
         let is_table_row = node.type_id() == ElementNodeTypeId(HTMLTableRowElementTypeId);
         let mut flow = ~TableFlow::from_box(base, box, is_table_row) as ~Flow:;
@@ -382,10 +385,11 @@ impl<'self> FlowConstructor<'self> {
     }
 
     fn build_flow_for_table_columns(&mut self, node: LayoutNode) -> ~Flow: {
-        let base = FlowData::new(self.next_flow_id(), node);
+        let base = FlowData::new_on_table(self.next_flow_id(), node);
         let box = self.build_box_for_node(node);
         let mut col_boxes = ~[];
         for kid in node.children() {
+            if kid.type_id() != ElementNodeTypeId(HTMLTableColElementTypeId) { continue; }
             match kid.swap_out_construction_result() {
                 ConstructionItemConstructionResult(InlineBoxesConstructionItem(
                         InlineBoxesConstructionResult {
@@ -403,7 +407,7 @@ impl<'self> FlowConstructor<'self> {
     }
 
     fn build_flow_for_table_cell(&mut self, node: LayoutNode) -> ~Flow: {
-        let base = FlowData::new(self.next_flow_id(), node);
+        let base = FlowData::new_on_table(self.next_flow_id(), node);
         let box = self.build_box_for_node(node);
         let mut flow = ~TableCellFlow::from_box(base, box) as ~Flow:;
         self.build_children_of_block_flow(&mut flow, node);

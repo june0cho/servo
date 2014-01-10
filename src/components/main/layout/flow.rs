@@ -33,7 +33,7 @@ use layout::display_list_builder::{DisplayListBuilder, ExtraDisplayListData};
 use layout::float_context::{FloatContext, Invalid};
 use layout::incremental::RestyleDamage;
 use layout::inline::InlineFlow;
-use layout::table::{TableFlow};
+use layout::table::{TableFlow, TableColGroupFlow};
 use layout::table_wrapper::{TableWrapperFlow};
 use layout::tablecell::{TableCellFlow};
 use layout::wrapper::LayoutNode;
@@ -84,6 +84,11 @@ pub trait Flow {
 
     /// If this is a table flow, returns the underlying object. Fails otherwise.
     fn as_table<'a>(&'a mut self) -> &'a mut TableFlow {
+        fail!("called as_table() on a non-table flow")
+    }
+
+    /// If this is a table flow, returns the underlying object. Fails otherwise.
+    fn as_table_colgroup<'a>(&'a mut self) -> &'a mut TableColGroupFlow {
         fail!("called as_table() on a non-table flow")
     }
 
@@ -312,6 +317,18 @@ pub trait PostorderFlowTraversal {
     }
 }
 
+pub struct TableColData {
+    min_widths : ~[Au]
+}
+
+impl TableColData {
+    pub fn new() -> TableColData {
+        TableColData {
+            min_widths: ~[]
+        }
+    }
+}
+
 /// Flags used in flows, tightly packed to save space.
 pub struct FlowFlags(u8);
 
@@ -417,6 +434,8 @@ pub struct FlowData {
 
     /// Various flags for flows, tightly packed to save space.
     flags: FlowFlags,
+
+    table_cols: Option<TableColData>,
 }
 
 pub struct BoxIterator {
@@ -457,6 +476,30 @@ impl FlowData {
             abs_position: Point2D(Au::new(0), Au::new(0)),
 
             flags: FlowFlags::new(style.get()),
+            table_cols: None,
+        }
+    }
+
+    pub fn new_on_table(id: int, node: LayoutNode) -> FlowData {
+        let style = node.style();
+        FlowData {
+            restyle_damage: node.restyle_damage(),
+
+            children: DList::new(),
+
+            id: id,
+
+            min_width: Au::new(0),
+            pref_width: Au::new(0),
+            position: Au::zero_rect(),
+            overflow: Au::zero_rect(),
+            floats_in: Invalid,
+            floats_out: Invalid,
+            num_floats: 0,
+            abs_position: Point2D(Au::new(0), Au::new(0)),
+
+            flags: FlowFlags::new(style.get()),
+            table_cols: Some(TableColData::new()),
         }
     }
 

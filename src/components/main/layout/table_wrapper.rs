@@ -7,7 +7,7 @@
 use layout::box::Box;
 use layout::context::LayoutContext;
 use layout::display_list_builder::{DisplayListBuilder, ExtraDisplayListData};
-use layout::flow::{TableWrapperFlowClass, FlowClass, Flow, FlowData, ImmutableFlowUtils};
+use layout::flow::{TableWrapperFlowClass, TableColGroupFlowClass, FlowClass, Flow, FlowData, ImmutableFlowUtils};
 use layout::flow;
 use layout::model::{MaybeAuto, Specified, Auto, specified_or_none, specified};
 use layout::float_context::{FloatContext, PlacementInfo, Invalid, FloatType};
@@ -56,7 +56,10 @@ pub struct TableWrapperFlow {
     box: Option<Box>,
 
     /// Additional floating flow members.
-    float: Option<~FloatedBlockInfo>
+    float: Option<~FloatedBlockInfo>,
+
+    col_boxes: ~[Box],
+    col_widths: ~[Au]
 }
 
 impl TableWrapperFlow {
@@ -64,7 +67,9 @@ impl TableWrapperFlow {
         TableWrapperFlow {
             base: base,
             box: None,
-            float: None
+            float: None,
+            col_boxes: ~[],
+            col_widths: ~[],
         }
     }
 
@@ -72,7 +77,9 @@ impl TableWrapperFlow {
         TableWrapperFlow {
             base: base,
             box: Some(box),
-            float: None
+            float: None,
+            col_boxes: ~[],
+            col_widths: ~[],
         }
     }
 
@@ -80,7 +87,9 @@ impl TableWrapperFlow {
         TableWrapperFlow {
             base: base,
             box: Some(box),
-            float: Some(~FloatedBlockInfo::new(float_type))
+            float: Some(~FloatedBlockInfo::new(float_type)),
+            col_boxes: ~[],
+            col_widths: ~[],
         }
     }
 
@@ -88,7 +97,9 @@ impl TableWrapperFlow {
         TableWrapperFlow {
             base: base,
             box: None,
-            float: None
+            float: None,
+            col_boxes: ~[],
+            col_widths: ~[],
         }
     }
 
@@ -96,7 +107,9 @@ impl TableWrapperFlow {
         TableWrapperFlow {
             base: base,
             box: None,
-            float: Some(~FloatedBlockInfo::new(float_type))
+            float: Some(~FloatedBlockInfo::new(float_type)),
+            col_boxes: ~[],
+            col_widths: ~[],
         }
     }
 
@@ -535,10 +548,18 @@ impl Flow for TableWrapperFlow {
         for child_ctx in self.base.child_iter() {
             assert!(child_ctx.starts_block_flow() || child_ctx.starts_inline_flow());
 
-            let child_base = flow::mut_base(*child_ctx);
-            min_width = geometry::max(min_width, child_base.min_width);
-            pref_width = geometry::max(pref_width, child_base.pref_width);
-            num_floats = num_floats + child_base.num_floats;
+            match child_ctx.class() {
+                TableColGroupFlowClass => {
+                    self.col_widths.push_all(child_ctx.as_table_colgroup().min_widths);
+                    //self.col_boxes.push_all_move(child_ctx.as_table_colgroup().cols);
+                }
+                _ => {
+                    let child_base = flow::mut_base(*child_ctx);
+                    min_width = geometry::max(min_width, child_base.min_width);
+                    pref_width = geometry::max(pref_width, child_base.pref_width);
+                    num_floats = num_floats + child_base.num_floats;
+                }
+            } 
         }
 
         if self.is_float() {
@@ -573,6 +594,7 @@ impl Flow for TableWrapperFlow {
     /// Dual boxes consume some width first, and the remainder is assigned to all child (block)
     /// contexts.
     fn assign_widths(&mut self, ctx: &mut LayoutContext) {
+        println!("{:?}", self.col_widths);
         debug!("assign_widths({}): assigning width for flow {}",
                if self.is_float() {
                    "float"
