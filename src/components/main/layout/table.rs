@@ -145,6 +145,11 @@ pub struct TableFlow {
     /// Whether this block flow is the root flow.
     is_table_row: bool,
 
+    cell_min_widths: ~[Au],
+    cell_pref_widths: ~[Au],
+
+    col_widths: ~[Au],
+
     /// Additional floating flow members.
     float: Option<~FloatedBlockInfo>
 }
@@ -155,6 +160,9 @@ impl TableFlow {
             base: base,
             box: None,
             is_table_row: false,
+            cell_min_widths: ~[],
+            cell_pref_widths: ~[],
+            col_widths: ~[],
             float: None
         }
     }
@@ -164,34 +172,10 @@ impl TableFlow {
             base: base,
             box: Some(box),
             is_table_row: is_table_row,
+            cell_min_widths: ~[],
+            cell_pref_widths: ~[],
+            col_widths: ~[],
             float: None
-        }
-    }
-
-    pub fn float_from_box(base: FlowData, float_type: FloatType, box: Box) -> TableFlow {
-        TableFlow {
-            base: base,
-            box: Some(box),
-            is_table_row: false,
-            float: Some(~FloatedBlockInfo::new(float_type))
-        }
-    }
-
-    pub fn new_root(base: FlowData) -> TableFlow {
-        TableFlow {
-            base: base,
-            box: None,
-            is_table_row: true,
-            float: None
-        }
-    }
-
-    pub fn new_float(base: FlowData, float_type: FloatType) -> TableFlow {
-        TableFlow {
-            base: base,
-            box: None,
-            is_table_row: false,
-            float: Some(~FloatedBlockInfo::new(float_type))
         }
     }
 
@@ -631,28 +615,51 @@ impl Flow for TableFlow {
     fn bubble_widths(&mut self, _: &mut LayoutContext) {
         let mut min_width = Au::new(0);
         let mut pref_width = Au::new(0);
-        let mut num_floats = 0;
 
         /* find max width from child block contexts */
         for child_ctx in self.base.child_iter() {
             assert!(child_ctx.starts_block_flow() || child_ctx.starts_inline_flow());
 
-            let child_base = flow::mut_base(*child_ctx);
-            if self.is_table_row {
-                min_width = min_width.add(&child_base.min_width);
-                pref_width = pref_width.add(&child_base.pref_width);
-            } else{
-                min_width = geometry::max(min_width, child_base.min_width);
-                pref_width = geometry::max(pref_width, child_base.pref_width);
-                num_floats = num_floats + child_base.num_floats;
+            let mut add_min_widths = ~[]; 
+            let mut add_pref_widths = ~[]; 
+            if child_ctx.is_table() {
+                    let mut min_widths_it = self.cell_min_widths.mut_iter();
+                    let mut pref_widths_it = self.cell_pref_widths.mut_iter();
+                    for &row_cell_min in child_ctx.as_table().cell_min_widths.iter() {
+                        let update_cell_min = match min_widths_it.next() {
+                            Some(cur_cell_min) => {
+                                *cur_cell_min = geometry::max(*cur_cell_min, row_cell_min);
+                                *cur_cell_min
+                            },
+                            None => {
+                                add_min_widths.push(row_cell_min);
+                                row_cell_min
+                            }
+                        };
+                        min_width = min_width.add(&update_cell_min);
+                    }
+                    for &row_cell_pref in child_ctx.as_table().cell_pref_widths.iter() {
+                        let update_cell_pref = match pref_widths_it.next() {
+                            Some(cur_cell_pref) => {
+                                *cur_cell_pref = geometry::max(*cur_cell_pref, row_cell_pref);
+                                *cur_cell_pref
+                            },
+                            None => {
+                                add_pref_widths.push(row_cell_pref);
+                                row_cell_pref
+                            }
+                        };
+                        min_width = min_width.add(&update_cell_pref);
+                    }
+            } else if child_ctx.is_table_cell() {
+                    let child_base = flow::mut_base(*child_ctx);
+                    self.cell_min_widths.push(child_base.min_width);
+                    self.cell_pref_widths.push(child_base.pref_width);
+                    min_width = min_width.add(&child_base.min_width);
+                    pref_width = pref_width.add(&child_base.pref_width);
             }
-        }
-
-        if self.is_float() {
-            self.base.num_floats = 1;
-            self.float.get_mut_ref().floated_children = num_floats;
-        } else {
-            self.base.num_floats = num_floats;
+            self.cell_min_widths.push_all(add_min_widths);
+            self.cell_pref_widths.push_all(add_pref_widths);
         }
 
         /* if not an anonymous block context, add in block box's widths.
@@ -723,10 +730,7 @@ impl Flow for TableFlow {
                 self.compute_table_margins(box, remaining_width, available_width)
             };
 
-            box.margin.set(SideOffsets2D::new(margin_top,
-                                              margin_right,
-                                              margin_bottom,
-                                              margin_left));
+            box.margin.set(Zero::zero());
 
             x_offset = box.offset();
             remaining_width = width;
@@ -739,28 +743,36 @@ impl Flow for TableFlow {
             position_ref.ptr.size.width = remaining_width + padding_and_borders;
         }
 
-        if self.is_float() {
-            self.base.position.size.width = remaining_width;
-        }
-
-        let has_inorder_children = if self.is_float() {
-            self.base.num_floats > 0
-        } else {
+        let has_inorder_children = 
             self.base.flags.inorder() || self.base.num_floats > 0
-        };
+        ;
 
+        let mut idx = -1;
+            println!("qqqqqq {:?}", self.debug_str());
         for kid in self.base.child_iter() {
             assert!(kid.starts_block_flow() || kid.starts_inline_flow());
 
+            let mut child_width = if kid.is_table() {
+                println!("{:?}", self.col_widths);
+                //update kids' col_widths
+                kid.as_table().col_widths = self.col_widths.slice_from(0).to_owned();
+                remaining_width
+            } else if kid.is_table_cell() {
+                idx = idx + 1;
+                self.col_widths[idx]
+            } else {
+                Au(0)
+            };
+            
             let child_base = flow::mut_base(*kid);
             child_base.position.origin.x = x_offset;
-            child_base.position.size.width = remaining_width;
+            child_base.position.size.width = child_width;
             child_base.flags.set_inorder(has_inorder_children);
 
             if self.is_table_row {
-                x_offset = x_offset + child_base.pref_width;
-                child_base.position.size.width = child_base.pref_width;
-            }
+                x_offset = x_offset + child_width;
+                println!("child-width {:?} at {:?}", child_width, idx);
+            } 
 
             if !child_base.flags.inorder() {
                 child_base.floats_in = FloatContext::new(0);

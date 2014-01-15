@@ -189,6 +189,10 @@ pub trait ImmutableFlowUtils {
 
     /// Returns true if this flow is an table flow of table row.
     fn is_table_cell(self) -> bool;
+    /// Returns true if this flow is an table flow of table row.
+    fn is_table(self) -> bool;
+    /// Returns true if this flow is an table flow of table row.
+    fn is_table_colgroup(self) -> bool;
 
     /// Dumps the flow tree for debugging.
     fn dump(self);
@@ -550,6 +554,26 @@ impl<'self> ImmutableFlowUtils for &'self Flow {
             AbsoluteFlowClass | BlockFlowClass | InlineBlockFlowClass |
             InlineFlowClass | TableWrapperFlowClass | 
             TableFlowClass | TableColGroupFlowClass => false,
+        }
+    }
+
+    /// Returns true if this flow is a table flow.
+    fn is_table(self) -> bool {
+        match self.class() {
+            TableFlowClass => true,
+            AbsoluteFlowClass | BlockFlowClass | InlineBlockFlowClass |
+            InlineFlowClass | TableWrapperFlowClass | 
+            TableCellFlowClass | TableColGroupFlowClass => false,
+        }
+    }
+
+    /// Returns true if this flow is a table flow.
+    fn is_table_colgroup(self) -> bool {
+        match self.class() {
+            TableColGroupFlowClass => true,
+            AbsoluteFlowClass | BlockFlowClass | InlineBlockFlowClass |
+            InlineFlowClass | TableWrapperFlowClass | 
+            TableFlowClass | TableCellFlowClass => false,
         }
     }
 
