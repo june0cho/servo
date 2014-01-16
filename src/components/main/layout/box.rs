@@ -98,8 +98,10 @@ pub enum SpecificBoxInfo {
     ImageBox(ImageBoxInfo),
     IframeBox(IframeBoxInfo),
     ScannedTextBox(ScannedTextBoxInfo),
-    TableColBox(TableColBoxInfo),
     UnscannedTextBox(UnscannedTextBoxInfo),
+    TableColBox(TableColBoxInfo),
+    TableCellBox(TableCellBoxInfo),
+    TableRowBox,
 }
 
 /// A box that represents a replaced content image and its accompanying borders, shadows, etc.
@@ -182,7 +184,7 @@ pub struct TableColBoxInfo {
 }
 
 impl TableColBoxInfo {
-    /// Creates the information specific to an iframe box.
+    /// Creates the information specific to an table column box.
     pub fn new(node: &LayoutNode) -> TableColBoxInfo {
         let span = node.with_element(|element| {
             element.get_attr(None, "span").and_then(|string| {
@@ -192,6 +194,35 @@ impl TableColBoxInfo {
         });
         TableColBoxInfo {
             span: span,
+        }
+    }
+}
+
+/// A box that represents table cell. 
+#[deriving(Clone)]
+pub struct TableCellBoxInfo {
+    colspan: Option<int>,
+    rowspan: Option<int>,
+}
+
+impl TableCellBoxInfo {
+    /// Creates the information specific to an table cell box.
+    pub fn new(node: &LayoutNode) -> TableCellBoxInfo {
+        let colspan = node.with_element(|element| {
+            element.get_attr(None, "colspan").and_then(|string| {
+                let n: Option<int> = FromStr::from_str(string);
+                n
+            })
+        });
+        let rowspan = node.with_element(|element| {
+            element.get_attr(None, "rowspan").and_then(|string| {
+                let n: Option<int> = FromStr::from_str(string);
+                n
+            })
+        });
+        TableCellBoxInfo {
+            colspan: colspan,
+            rowspan: rowspan,
         }
     }
 }
@@ -306,7 +337,8 @@ impl Box {
     /// CSS 2.1.
     fn guess_width(&self) -> Au {
         match self.specific {
-            GenericBox | IframeBox(_) | ImageBox(_) | TableColBox(_) => {}
+            GenericBox | IframeBox(_) | ImageBox(_) |
+              TableColBox(_) | TableCellBox(_) | TableRowBox => {},
             ScannedTextBox(_) | UnscannedTextBox(_) => return Au(0),
         }
 
@@ -795,7 +827,7 @@ impl Box {
                 self.finalize_position_and_size_of_iframe(iframe_box, offset, builder.ctx)
             }
             GenericBox | ImageBox(_) | ScannedTextBox(_) | UnscannedTextBox(_) |
-                TableColBox(_) => {}
+                TableColBox(_) | TableCellBox(_) | TableRowBox => {}
         }
 
         // Add a border, if applicable.
@@ -808,7 +840,7 @@ impl Box {
     pub fn minimum_and_preferred_widths(&self) -> (Au, Au) {
         let guessed_width = self.guess_width();
         let (additional_minimum, additional_preferred) = match self.specific {
-            GenericBox | IframeBox(_) | TableColBox(_) => (Au(0), Au(0)),
+            GenericBox | IframeBox(_) | TableColBox(_) | TableCellBox(_) | TableRowBox => (Au(0), Au(0)),
             ImageBox(ref image_box_info) => {
                 let image_width = image_box_info.image_width();
                 (image_width, image_width)
@@ -836,7 +868,7 @@ impl Box {
     /// FIXME(pcwalton): This function *mutates* the height? Gross! Refactor please.
     pub fn box_height(&self) -> Au {
         match self.specific {
-            GenericBox | IframeBox(_) | TableColBox(_) => Au(0),
+            GenericBox | IframeBox(_) | TableColBox(_) | TableCellBox(_) | TableRowBox => Au(0),
             ImageBox(ref image_box_info) => {
                 let size = image_box_info.image.mutate().ptr.get_size();
                 let height = Au::from_px(size.unwrap_or(Size2D(0, 0)).height);
@@ -861,7 +893,7 @@ impl Box {
     /// Attempts to split this box so that its width is no more than `max_width`.
     pub fn split_to_width(&self, max_width: Au, starts_line: bool) -> SplitBoxResult {
         match self.specific {
-            GenericBox | IframeBox(_) | ImageBox(_) | TableColBox(_) => CannotSplit,
+            GenericBox | IframeBox(_) | ImageBox(_) | TableColBox(_) | TableCellBox(_) | TableRowBox => CannotSplit,
             UnscannedTextBox(_) => fail!("Unscanned text boxes should have been scanned by now!"),
             ScannedTextBox(ref text_box_info) => {
                 let mut pieces_processed_count: uint = 0;
@@ -969,7 +1001,7 @@ impl Box {
     /// Assigns the appropriate width to this box.
     pub fn assign_width(&self) {
         match self.specific {
-            GenericBox | IframeBox(_) | TableColBox(_) => {
+            GenericBox | IframeBox(_) | TableColBox(_) | TableCellBox(_) | TableRowBox => {
                 // FIXME(pcwalton): This seems clownshoes; can we remove?
                 self.position.mutate().ptr.size.width = Au::from_px(45)
             }
@@ -1017,6 +1049,8 @@ impl Box {
             ScannedTextBox(_) => "ScannedTextBox",
             UnscannedTextBox(_) => "UnscannedTextBox",
             TableColBox(_) => "TableColBox",
+            TableCellBox(_) => "TableCellBox",
+            TableRowBox => "TableRowBox",
         };
 
         format!("({}{}{}{})",

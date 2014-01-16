@@ -7,7 +7,7 @@
 use layout::box::Box;
 use layout::context::LayoutContext;
 use layout::display_list_builder::{DisplayListBuilder, ExtraDisplayListData};
-use layout::flow::{TableWrapperFlowClass, TableColGroupFlowClass, FlowClass, Flow, FlowData, ImmutableFlowUtils, BlockFlowClass};
+use layout::flow::{TableWrapperFlowClass, FlowClass, Flow, FlowData, ImmutableFlowUtils};
 use layout::flow;
 use layout::model::{MaybeAuto, Specified, Auto, specified_or_none, specified};
 use layout::float_context::{FloatContext, PlacementInfo, Invalid, FloatType};
@@ -272,7 +272,6 @@ impl TableWrapperFlow {
             margin_bottom = box.margin.get().bottom;
         }
 
-        let mut max_y = Au::new(0);
         for kid in self.base.child_iter() {
             kid.collapse_margins(top_margin_collapsible,
                                  &mut first_in_flow,
@@ -539,8 +538,14 @@ impl Flow for TableWrapperFlow {
                         }
                     }
                 }
-                let mut diff = child_ctx.as_table().cell_min_widths.len() - self.col_widths.len();
-                println!("{:?} columns from colgroup, but extra {:?} columns are needed", self.col_widths.len(), diff);
+                let num_child_cells = child_ctx.as_table().cell_min_widths.len();
+                let num_col_cells = self.col_widths.len();
+                println!("{:?} column(s) from colgroup, but the child has {:?} column(s)", num_col_cells, num_child_cells);
+                let diff = if num_child_cells > num_col_cells { 
+                    num_child_cells - num_col_cells 
+                } else {
+                    0
+                };
                 for _ in range(0, diff) {
                     self.col_widths.push( Au::new(0) );
                 }
@@ -644,7 +649,7 @@ impl Flow for TableWrapperFlow {
                 fix_cell_width = fix_cell_width.add(col_width);
             }
         }
-        let mut default_cell_width = if no_width_cnt > Au(0) {
+        let default_cell_width = if no_width_cnt > Au(0) {
             (remaining_width - fix_cell_width)/no_width_cnt
         } else {
             Au(0)

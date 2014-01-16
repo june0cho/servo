@@ -93,7 +93,7 @@ pub trait Flow {
     }
 
     /// If this is a table flow, returns the underlying object. Fails otherwise.
-    fn as_tablecell<'a>(&'a mut self) -> &'a mut TableCellFlow {
+    fn as_table_cell<'a>(&'a mut self) -> &'a mut TableCellFlow {
         fail!("called as_table() on a non-table flow")
     }
 
@@ -676,13 +676,13 @@ impl<'self> MutableFlowUtils for &'self mut Flow {
                           dirty: &Rect<Au>,
                           list: &Cell<DisplayList<E>>)
                           -> bool {
-        debug!("Flow: building display list for f{}", base(self).id);
+        debug!("Flow: building display list for f{}, {:?}", base(self).id, self.class());
         match self.class() {
             BlockFlowClass => self.as_block().build_display_list_block(builder, dirty, list),
             InlineFlowClass => self.as_inline().build_display_list_inline(builder, dirty, list),
             TableFlowClass => self.as_table().build_display_list_table(builder, dirty, list),
             TableWrapperFlowClass => self.as_table_wrapper().build_display_list_table(builder, dirty, list),
-            TableCellFlowClass => self.as_tablecell().build_display_list_table(builder, dirty, list),
+            TableCellFlowClass => self.as_table_cell().build_display_list_table(builder, dirty, list),
             // TableColGroupFlowClass doesn't have any box to display.
             TableColGroupFlowClass => false,
             _ => fail!("Tried to build_display_list_recurse of flow: {:?}", self),

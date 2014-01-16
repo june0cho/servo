@@ -91,14 +91,12 @@ impl Flow for TableColGroupFlow {
     any boxes it is responsible for flowing.  */
 
     fn bubble_widths(&mut self, _: &mut LayoutContext) {
-
-        let mut width_num = 0;
         for box in self.cols.iter() {
             let (width, _) = box.minimum_and_preferred_widths();
             
             let span:int = match box.specific {
                 TableColBox(col_box) => col_box.span.unwrap_or(1),
-                _ => fail!("Other box come out in TableColGroupFlow.")
+                _ => fail!("Other box come out in TableColGroupFlow. {:?}", box.specific)
             };
             for col_num in range(0, span) {
                 self.min_widths.push(width);
@@ -549,7 +547,11 @@ impl TableFlow {
             return true;
         }
 
-        debug!("build_display_list_block: adding display element");
+        if self.is_table_row {
+            debug!("build_display_list_table_row: adding display element");
+        } else {
+            debug!("build_display_list_table: adding display element");
+        }
 
         // add box that starts block context
         for box in self.box.iter() {
@@ -623,40 +625,44 @@ impl Flow for TableFlow {
             let mut add_min_widths = ~[]; 
             let mut add_pref_widths = ~[]; 
             if child_ctx.is_table() {
-                    let mut min_widths_it = self.cell_min_widths.mut_iter();
-                    let mut pref_widths_it = self.cell_pref_widths.mut_iter();
-                    for &row_cell_min in child_ctx.as_table().cell_min_widths.iter() {
-                        let update_cell_min = match min_widths_it.next() {
-                            Some(cur_cell_min) => {
-                                *cur_cell_min = geometry::max(*cur_cell_min, row_cell_min);
-                                *cur_cell_min
-                            },
-                            None => {
-                                add_min_widths.push(row_cell_min);
-                                row_cell_min
-                            }
-                        };
-                        min_width = min_width.add(&update_cell_min);
-                    }
-                    for &row_cell_pref in child_ctx.as_table().cell_pref_widths.iter() {
-                        let update_cell_pref = match pref_widths_it.next() {
-                            Some(cur_cell_pref) => {
-                                *cur_cell_pref = geometry::max(*cur_cell_pref, row_cell_pref);
-                                *cur_cell_pref
-                            },
-                            None => {
-                                add_pref_widths.push(row_cell_pref);
-                                row_cell_pref
-                            }
-                        };
-                        min_width = min_width.add(&update_cell_pref);
-                    }
+                if self.col_widths.is_empty() {
+                    self.col_widths = child_ctx.as_table().col_widths.slice_from(0).to_owned();
+                }
+                let mut min_widths_it = self.cell_min_widths.mut_iter();
+                let mut pref_widths_it = self.cell_pref_widths.mut_iter();
+                for &row_cell_min in child_ctx.as_table().cell_min_widths.iter() {
+                    let update_cell_min = match min_widths_it.next() {
+                        Some(cur_cell_min) => {
+                            *cur_cell_min = geometry::max(*cur_cell_min, row_cell_min);
+                            *cur_cell_min
+                        },
+                        None => {
+                            add_min_widths.push(row_cell_min);
+                            row_cell_min
+                        }
+                    };
+                    min_width = min_width.add(&update_cell_min);
+                }
+                for &row_cell_pref in child_ctx.as_table().cell_pref_widths.iter() {
+                    let update_cell_pref = match pref_widths_it.next() {
+                        Some(cur_cell_pref) => {
+                            *cur_cell_pref = geometry::max(*cur_cell_pref, row_cell_pref);
+                            *cur_cell_pref
+                        },
+                        None => {
+                            add_pref_widths.push(row_cell_pref);
+                            row_cell_pref
+                        }
+                    };
+                    min_width = min_width.add(&update_cell_pref);
+                }
             } else if child_ctx.is_table_cell() {
-                    let child_base = flow::mut_base(*child_ctx);
-                    self.cell_min_widths.push(child_base.min_width);
-                    self.cell_pref_widths.push(child_base.pref_width);
-                    min_width = min_width.add(&child_base.min_width);
-                    pref_width = pref_width.add(&child_base.pref_width);
+                self.col_widths.push(child_ctx.as_table_cell().width);
+                let child_base = flow::mut_base(*child_ctx);
+                self.cell_min_widths.push(child_base.min_width);
+                self.cell_pref_widths.push(child_base.pref_width);
+                min_width = min_width.add(&child_base.min_width);
+                pref_width = pref_width.add(&child_base.pref_width);
             }
             self.cell_min_widths.push_all(add_min_widths);
             self.cell_pref_widths.push_all(add_pref_widths);
@@ -691,7 +697,7 @@ impl Flow for TableFlow {
                if self.is_float() {
                    "float"
                } else {
-                   "block"
+                   "table"
                },
                self.base.id);
 
@@ -748,12 +754,11 @@ impl Flow for TableFlow {
         ;
 
         let mut idx = -1;
-            println!("qqqqqq {:?}", self.debug_str());
+        println!("assign_width {:?}", self.debug_str());
         for kid in self.base.child_iter() {
             assert!(kid.starts_block_flow() || kid.starts_inline_flow());
 
-            let mut child_width = if kid.is_table() {
-                println!("{:?}", self.col_widths);
+            let child_width = if kid.is_table() {
                 //update kids' col_widths
                 kid.as_table().col_widths = self.col_widths.slice_from(0).to_owned();
                 remaining_width

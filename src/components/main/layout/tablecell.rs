@@ -59,7 +59,8 @@ pub struct TableCellFlow {
     float: Option<~FloatedBlockInfo>,
 
     min_width: Au,
-    max_width: Au
+    max_width: Au,
+    width: Au,
 }
 
 impl TableCellFlow {
@@ -69,7 +70,8 @@ impl TableCellFlow {
             box: None,
             float: None,
             min_width: Au(0),
-            max_width: Au(0)
+            max_width: Au(0),
+            width: Au(0),
         }
     }
 
@@ -79,7 +81,8 @@ impl TableCellFlow {
             box: Some(box),
             float: None,
             min_width: Au(0),
-            max_width: Au(0)
+            max_width: Au(0),
+            width: Au(0),
         }
     }
 
@@ -89,17 +92,8 @@ impl TableCellFlow {
             box: Some(box),
             float: Some(~FloatedBlockInfo::new(float_type)),
             min_width: Au(0),
-            max_width: Au(0)
-        }
-    }
-
-    pub fn new_root(base: FlowData) -> TableCellFlow {
-        TableCellFlow {
-            base: base,
-            box: None,
-            float: None,
-            min_width: Au(0),
-            max_width: Au(0)
+            max_width: Au(0),
+            width: Au(0),
         }
     }
 
@@ -109,7 +103,8 @@ impl TableCellFlow {
             box: None,
             float: Some(~FloatedBlockInfo::new(float_type)),
             min_width: Au(0),
-            max_width: Au(0)
+            max_width: Au(0),
+            width: Au(0),
         }
     }
 
@@ -125,6 +120,7 @@ impl TableCellFlow {
         self.float = None;
         self.min_width = Au(0);
         self.max_width = Au(0);
+        self.width = Au(0);
     }
 
     /// Computes left and right margins and width based on CSS 2.1 section 10.3.3.
@@ -473,7 +469,7 @@ impl TableCellFlow {
             return true;
         }
 
-        debug!("build_display_list_block: adding display element");
+        debug!("--build_display_list_table_cell: adding display element");
 
         // add box that starts block context
         for box in self.box.iter() {
@@ -525,7 +521,7 @@ impl Flow for TableCellFlow {
         TableCellFlowClass
     }
 
-    fn as_tablecell<'a>(&'a mut self) -> &'a mut TableCellFlow {
+    fn as_table_cell<'a>(&'a mut self) -> &'a mut TableCellFlow {
         self
     }
 
@@ -537,6 +533,7 @@ impl Flow for TableCellFlow {
     any boxes it is responsible for flowing.  */
 
     fn bubble_widths(&mut self, _: &mut LayoutContext) {
+        let mut width = Au::new(0);
         let mut min_width = Au::new(0);
         let mut pref_width = Au::new(0);
         let mut num_floats = 0;
@@ -565,15 +562,14 @@ impl Flow for TableCellFlow {
             let (this_minimum_width, this_preferred_width) = box.minimum_and_preferred_widths();
             min_width = min_width + this_minimum_width;
             pref_width = pref_width + this_preferred_width;
+            width = this_minimum_width; // get value from width property
         }
 
         self.base.min_width = min_width;
         self.base.pref_width = pref_width;
 
-        self.min_width = min_width;
-        // temporally
-        self.max_width = min_width.scale_by(2.0);
-        println!("TABLE Cell: min_width:{} pref_width:{}", min_width, pref_width);
+        self.width = width;
+        println!("TABLE Cell: width:{} min_width:{} pref_width:{}", width, min_width, pref_width);
     }
 
     /// Recursively (top-down) determines the actual width of child contexts and boxes. When called
@@ -589,7 +585,6 @@ impl Flow for TableCellFlow {
 
         // The position was set to the containing block by the flow's parent.
         let mut remaining_width = self.base.position.size.width;
-        //let mut remaining_width = self.max_width;
         let mut x_offset = Au::new(0);
 
         for box in self.box.iter() {
