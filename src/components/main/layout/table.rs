@@ -725,12 +725,12 @@ impl Flow for TableFlow {
             let available_width = remaining_width - box.noncontent_width();
 
             // Top and bottom margins for blocks are 0 if auto.
-            let margin_top = MaybeAuto::from_style(style.Margin.margin_top,
+            let _margin_top = MaybeAuto::from_style(style.Margin.margin_top,
                                                    remaining_width).specified_or_zero();
-            let margin_bottom = MaybeAuto::from_style(style.Margin.margin_bottom,
+            let _margin_bottom = MaybeAuto::from_style(style.Margin.margin_bottom,
                                                       remaining_width).specified_or_zero();
 
-            let (width, margin_left, margin_right) = if self.is_float() {
+            let (width, _margin_left, _margin_right) = if self.is_float() {
                 self.compute_float_margins(box, remaining_width)
             } else {
                 self.compute_table_margins(box, remaining_width, available_width)

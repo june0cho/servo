@@ -569,7 +569,7 @@ impl Flow for TableCellFlow {
         self.base.pref_width = pref_width;
 
         self.width = width;
-        println!("TABLE Cell: width:{} min_width:{} pref_width:{}", width, min_width, pref_width);
+        println!(" TABLE Cell: width:{} min_width:{} pref_width:{}", width, min_width, pref_width);
     }
 
     /// Recursively (top-down) determines the actual width of child contexts and boxes. When called
@@ -577,14 +577,14 @@ impl Flow for TableCellFlow {
     ///
     /// Dual boxes consume some width first, and the remainder is assigned to all child (block)
     /// contexts.
-    fn assign_widths(&mut self, ctx: &mut LayoutContext) {
+    fn assign_widths(&mut self, _ctx: &mut LayoutContext) {
         debug!("assign_widths({}): assigning width for flow {}",
                    "table_cell"
                ,
                self.base.id);
 
         // The position was set to the containing block by the flow's parent.
-        let mut remaining_width = self.base.position.size.width;
+        let remaining_width = self.base.position.size.width;
         let mut x_offset = Au::new(0);
 
         for box in self.box.iter() {
@@ -605,7 +605,7 @@ impl Flow for TableCellFlow {
             let margin_bottom = MaybeAuto::from_style(style.Margin.margin_bottom,
                                                       remaining_width).specified_or_zero();
 
-            let (width, margin_left, margin_right) = 
+            let (_width, margin_left, margin_right) = 
                 self.compute_table_margins(box, remaining_width, available_width)
             ;
 
@@ -615,8 +615,11 @@ impl Flow for TableCellFlow {
                                               margin_left));
 
             x_offset = box.offset();
-            remaining_width = width;
-
+            /*
+            if remaining_width < width {
+                remaining_width = width;
+            }
+            */
             // The associated box is the border box of this flow.
             let position_ref = box.position.mutate();
             position_ref.ptr.origin.x = box.margin.get().left;

@@ -81,3 +81,6 @@ ul, ol, dl    { page-break-before: avoid }
 :link           { color: blue }
 script          { display: none }
 style           { display: none }
+
+
+* { table-layout: fixed }

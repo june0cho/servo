@@ -582,17 +582,21 @@ impl Flow for TableWrapperFlow {
     /// contexts.
     fn assign_widths(&mut self, ctx: &mut LayoutContext) {
         println!("{:?}", self.col_widths);
-        debug!("assign_widths({}): assigning width for flow {}",
-               if self.is_float() {
-                   "float"
-               } else {
-                   "block"
-               },
-               self.base.id);
+        debug!("assign_widths({}): assigning width for flow {}", "table-wrapper", self.base.id);
 
         // The position was set to the containing block by the flow's parent.
         let mut remaining_width = self.base.position.size.width;
         let mut x_offset = Au::new(0);
+
+        let mut no_width_cnt = Au(0);
+        let mut fix_cell_width = Au(0);
+        for col_width in self.col_widths.iter() {
+            if *col_width == Au(0) {
+                no_width_cnt = no_width_cnt.add(&Au(1));
+            } else {
+                fix_cell_width = fix_cell_width.add(col_width);
+            }
+        }
 
         for box in self.box.iter() {
             let style = box.style();
@@ -624,7 +628,8 @@ impl Flow for TableWrapperFlow {
                                               margin_left));
 
             x_offset = box.offset();
-            remaining_width = width;
+
+            remaining_width = geometry::max( fix_cell_width, width );
 
             // The associated box is the border box of this flow.
             let position_ref = box.position.mutate();
@@ -634,27 +639,21 @@ impl Flow for TableWrapperFlow {
             position_ref.ptr.size.width = remaining_width + padding_and_borders;
         }
 
-        let has_inorder_children = if self.is_float() {
-            self.base.num_floats > 0
-        } else {
-            self.base.flags.inorder() || self.base.num_floats > 0
-        };
-
-        let mut no_width_cnt = Au(0);
-        let mut fix_cell_width = Au(0);
-        for col_width in self.col_widths.iter() {
-            if *col_width == Au(0) {
-                no_width_cnt = no_width_cnt.add(&Au(1));
-            } else {
-                fix_cell_width = fix_cell_width.add(col_width);
-            }
-        }
-        let default_cell_width = if no_width_cnt > Au(0) {
-            (remaining_width - fix_cell_width)/no_width_cnt
-        } else {
+        let default_cell_width = if fix_cell_width >= remaining_width {
+            self.base.position.size.width = remaining_width;
             Au(0)
+        } else if fix_cell_width < remaining_width && no_width_cnt == Au(0) {
+            for col_width in self.col_widths.mut_iter() {
+                *col_width = *col_width * remaining_width / fix_cell_width;
+            }
+            Au(0)
+        } else { // if fix_cell_width < remaining_width && no_width_cnt != Au(0)
+            (remaining_width - fix_cell_width) / no_width_cnt
         };
 
+        let has_inorder_children =
+            self.base.flags.inorder() || self.base.num_floats > 0
+        ;
 
         for kid in self.base.child_iter() {
             assert!(kid.starts_block_flow() || kid.starts_inline_flow());
