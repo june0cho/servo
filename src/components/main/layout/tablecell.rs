@@ -562,7 +562,7 @@ impl Flow for TableCellFlow {
             let (this_minimum_width, this_preferred_width) = box.minimum_and_preferred_widths();
             min_width = min_width + this_minimum_width;
             pref_width = pref_width + this_preferred_width;
-            width = this_minimum_width; // get value from width property
+            width = MaybeAuto::from_style(box.style().Box.width, Au::new(0)).specified_or_zero(); // get value from width property
         }
 
         self.base.min_width = min_width;
