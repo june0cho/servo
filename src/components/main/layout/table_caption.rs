@@ -544,7 +544,6 @@ impl Flow for TableCaptionFlow {
 
     fn bubble_widths(&mut self, _: &mut LayoutContext) {
         let mut min_width = Au::new(0);
-        let mut pref_width = Au::new(0);
         let mut num_floats = 0;
 
         /* find max width from child block contexts */
@@ -553,7 +552,6 @@ impl Flow for TableCaptionFlow {
 
             let child_base = flow::mut_base(*kid);
             min_width = geometry::max(min_width, child_base.min_width);
-            pref_width = geometry::max(pref_width, child_base.pref_width);
             num_floats = num_floats + child_base.num_floats;
         }
 
@@ -574,11 +572,10 @@ impl Flow for TableCaptionFlow {
 
             let (this_minimum_width, this_preferred_width) = box_.minimum_and_preferred_widths();
             min_width = min_width + this_minimum_width;
-            pref_width = pref_width + this_preferred_width;
         }
 
         self.base.min_width = min_width;
-        self.base.pref_width = pref_width;
+        self.base.pref_width = min_width;
     }
 
     /// Recursively (top-down) determines the actual width of child contexts and boxes. When called

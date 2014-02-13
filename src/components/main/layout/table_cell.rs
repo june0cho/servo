@@ -371,7 +371,7 @@ impl TableCellFlow {
             return true;
         }
 
-        debug!("build_display_list_table: adding display element");
+        debug!("build_display_list_table[Cell]: adding display element");
 
         // add box that starts table context
         for box_ in self.box_.iter() {
@@ -460,14 +460,21 @@ impl Flow for TableCellFlow {
         for box_ in self.box_.iter() {
             {
                 // Can compute border width here since it doesn't depend on anything.
-                box_.compute_borders(box_.style())
+                box_.compute_borders(box_.style());
+
             }
 
-            let (this_minimum_width, this_preferred_width) = box_.minimum_and_preferred_widths();
-            min_width = min_width + this_minimum_width;
-            pref_width = pref_width + this_preferred_width;
+            // TODO: Preferred percentage should be calculated. `min-width` and `max-width`
+            // should be considered. Padding and border should also be calculated.
+            let specified_width = MaybeAuto::from_style(box_.style().Box.width,
+                                                    Au::new(0)).specified_or_zero();
+            println!("specified_width: {:?}", specified_width);
+
+            min_width = geometry::max(min_width, specified_width);
+            pref_width = geometry::max(min_width, pref_width);
         }
 
+        println!(" CELL{:?} {:?} {:?}", self.debug_str(), min_width, pref_width);
         self.base.min_width = min_width;
         self.base.pref_width = pref_width;
     }

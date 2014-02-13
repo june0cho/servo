@@ -64,6 +64,12 @@ pub struct TableRowGroupFlow {
 
     /// Column widths
     col_widths: ~[Au],
+
+    /// Column min widths
+    col_min_widths: ~[Au],
+
+    /// Column pref widths
+    col_pref_widths: ~[Au],
 }
 
 impl TableRowGroupFlow {
@@ -74,6 +80,8 @@ impl TableRowGroupFlow {
             is_fixed: false,
             float: None,
             col_widths: ~[],
+            col_min_widths: ~[],
+            col_pref_widths: ~[],
         }
     }
 
@@ -84,6 +92,8 @@ impl TableRowGroupFlow {
             is_fixed: is_fixed,
             float: None,
             col_widths: ~[],
+            col_min_widths: ~[],
+            col_pref_widths: ~[],
         }
     }
 
@@ -94,6 +104,8 @@ impl TableRowGroupFlow {
             is_fixed: false,
             float: Some(~FloatedTableInfo::new(float_type)),
             col_widths: ~[],
+            col_min_widths: ~[],
+            col_pref_widths: ~[],
         }
     }
 
@@ -104,6 +116,8 @@ impl TableRowGroupFlow {
             is_fixed: false,
             float: Some(~FloatedTableInfo::new(float_type)),
             col_widths: ~[],
+            col_min_widths: ~[],
+            col_pref_widths: ~[],
         }
     }
 
@@ -118,6 +132,8 @@ impl TableRowGroupFlow {
         self.box_ = None;
         self.float = None;
         self.col_widths = ~[];
+        self.col_min_widths = ~[];
+        self.col_pref_widths = ~[];
     }
 
     // inline(always) because this is only ever called by in-order or non-in-order top-level
@@ -449,18 +465,51 @@ impl Flow for TableRowGroupFlow {
         /* find max width from child block contexts */
         for kid in self.base.child_iter() {
             assert!(kid.is_table_row());
-            if self.col_widths.is_empty() {
+            if self.col_widths.is_empty() { // First Row
+                assert!(self.col_min_widths.is_empty() && self.col_pref_widths.is_empty());
                 self.col_widths = kid.as_table_row().col_widths.clone();
+                self.col_min_widths = kid.as_table_row().col_min_widths.clone();
+                self.col_pref_widths = kid.as_table_row().col_pref_widths.clone();
             } else {
+                {
+                min_width = Au(0);
+                let mut kid_min_widths = kid.as_table_row().col_min_widths.iter();
+                for col_min_width in self.col_min_widths.mut_iter() {
+                    match kid_min_widths.next() {
+                        Some(kid_min_width) => {
+                            if *col_min_width < *kid_min_width {
+                                *col_min_width = *kid_min_width;
+                            }
+                        },
+                        None => {}
+                    }
+                    min_width = min_width + *col_min_width;
+                }
+                }{
+                pref_width = Au(0);
+                let mut kid_pref_widths = kid.as_table_row().col_pref_widths.iter();
+                for col_pref_width in self.col_pref_widths.mut_iter() {
+                    match kid_pref_widths.next() {
+                        Some(kid_pref_width) => {
+                            if *col_pref_width < *kid_pref_width {
+                                *col_pref_width = *kid_pref_width;
+                            }
+                        },
+                        None => {}
+                    }
+                    pref_width = pref_width + *col_pref_width;
+                }
+                }
                 let num_cols = self.col_widths.len();
                 let num_child_cols = kid.as_table_row().col_widths.len();
-                for _ in range(num_cols, num_child_cols) {
+                for i in range(num_cols, num_child_cols) {
                     self.col_widths.push(Au::new(0));
+                    self.col_min_widths.push(kid.as_table_row().col_min_widths[i]);
+                    self.col_pref_widths.push(kid.as_table_row().col_pref_widths[i]);
                 }
             }
+
             let child_base = flow::mut_base(*kid);
-            min_width = geometry::max(min_width, child_base.min_width);
-            pref_width = geometry::max(pref_width, child_base.pref_width);
             num_floats = num_floats + child_base.num_floats;
         }
 
@@ -471,16 +520,8 @@ impl Flow for TableRowGroupFlow {
             self.base.num_floats = num_floats;
         }
 
-        /* if not an anonymous block context, add in block box's widths.
-           these widths will not include child elements, just padding etc. */
-        for box_ in self.box_.iter() {
-            let (this_minimum_width, this_preferred_width) = box_.minimum_and_preferred_widths();
-            min_width = min_width + this_minimum_width;
-            pref_width = pref_width + this_preferred_width;
-        }
-
         self.base.min_width = min_width;
-        self.base.pref_width = pref_width;
+        self.base.pref_width = geometry::max(min_width, pref_width);
     }
 
     /// Recursively (top-down) determines the actual width of child contexts and boxes. When called

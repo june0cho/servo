@@ -139,22 +139,30 @@ impl TableWrapperFlow {
                      -> (Au, Au, Au) {
         // If width is not 'auto', and width + margins > available_width, all 'auto' margins are
         // treated as 0.
-        let (left_margin, right_margin) = match width {
-            Auto => (left_margin, right_margin),
+        let (table_width, left_margin, right_margin) = match width {
+            Auto => {
+                let table_width = if available_width > self.base.pref_width {
+                   self.base.pref_width
+                } else {
+                    geometry::max(available_width, self.base.min_width)
+                };
+                (table_width, left_margin, right_margin)
+            },
             Specified(width) => {
+                let table_width = geometry::max(width, self.base.min_width);
                 let left = left_margin.specified_or_zero();
                 let right = right_margin.specified_or_zero();
 
-                if((left + right + width) > available_width) {
-                    (Specified(left), Specified(right))
+                if((left + right + table_width) > available_width) {
+                    (table_width, Specified(left), Specified(right))
                 } else {
-                    (left_margin, right_margin)
+                    (table_width, left_margin, right_margin)
                 }
             }
         };
 
         //Invariant: left_margin_Au + width_Au + right_margin_Au == available_width
-        let (left_margin_Au, width_Au, right_margin_Au) = match (left_margin, width, right_margin) {
+        let (left_margin_Au, width_Au, right_margin_Au) = match (left_margin, Specified(table_width), right_margin) {
             //If all have a computed value other than 'auto', the system is over-constrained and we need to discard a margin.
             //if direction is ltr, ignore the specified right margin and solve for it. If it is rtl, ignore the specified
             //left margin. FIXME(eatkinson): this assumes the direction is ltr
@@ -585,16 +593,15 @@ impl Flow for TableWrapperFlow {
             self.base.num_floats = num_floats;
         }
 
-        /* if not an anonymous block context, add in block box's widths.
-           these widths will not include child elements, just padding etc. */
         for box_ in self.box_.iter() {
-            let (this_minimum_width, this_preferred_width) = box_.minimum_and_preferred_widths();
-            min_width = min_width + this_minimum_width;
-            pref_width = pref_width + this_preferred_width;
+            let specified_width = MaybeAuto::from_style(box_.style().Box.width, Au::new(0)).specified_or_zero();
+            min_width = geometry::max(min_width, specified_width);
         }
 
+        // min_width = max(caption.min_width, sum(all col.min_width))
         self.base.min_width = min_width;
-        self.base.pref_width = pref_width;
+        // pref_width = max(caption.min_width, sum(all col.pref_width))
+        self.base.pref_width = geometry::max(min_width, pref_width);
     }
 
     /// Recursively (top-down) determines the actual width of child contexts and boxes. When called
@@ -616,8 +623,10 @@ impl Flow for TableWrapperFlow {
         let mut x_offset = Au::new(0);
 
         let mut fix_cell_width = Au(0);
-        for col_width in self.col_widths.iter() {
-            fix_cell_width = fix_cell_width.add(col_width);
+        if self.is_fixed_table_layout {
+            for col_width in self.col_widths.iter() {
+                fix_cell_width = fix_cell_width.add(col_width);
+            }
         }
 
         if self.is_float() {
@@ -667,7 +676,11 @@ impl Flow for TableWrapperFlow {
             let border_left = style.Border.border_left_width;
             let border_right = style.Border.border_right_width;
             let padding_and_borders = padding_left + padding_right + border_left + border_right;
-            remaining_width = geometry::max(fix_cell_width + padding_and_borders, w);
+            remaining_width = if self.is_fixed_table_layout {
+                geometry::max(fix_cell_width + padding_and_borders, w)
+            } else {
+                w
+            };
 
             // The associated box is the border box of this flow.
             let mut position_ref = box_.position.borrow_mut();

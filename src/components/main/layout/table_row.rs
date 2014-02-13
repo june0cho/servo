@@ -64,6 +64,12 @@ pub struct TableRowFlow {
 
     /// Column widths.
     col_widths: ~[Au],
+
+    /// Column min widths.
+    col_min_widths: ~[Au],
+
+    /// Column pref widths.
+    col_pref_widths: ~[Au],
 }
 
 impl TableRowFlow {
@@ -74,6 +80,8 @@ impl TableRowFlow {
             is_fixed: false,
             float: None,
             col_widths: ~[],
+            col_min_widths: ~[],
+            col_pref_widths: ~[],
         }
     }
 
@@ -84,6 +92,8 @@ impl TableRowFlow {
             is_fixed: is_fixed,
             float: None,
             col_widths: ~[],
+            col_min_widths: ~[],
+            col_pref_widths: ~[],
         }
     }
 
@@ -94,6 +104,8 @@ impl TableRowFlow {
             is_fixed: false,
             float: Some(~FloatedTableInfo::new(float_type)),
             col_widths: ~[],
+            col_min_widths: ~[],
+            col_pref_widths: ~[],
         }
     }
 
@@ -104,6 +116,8 @@ impl TableRowFlow {
             is_fixed: false,
             float: Some(~FloatedTableInfo::new(float_type)),
             col_widths: ~[],
+            col_min_widths: ~[],
+            col_pref_widths: ~[],
         }
     }
 
@@ -117,6 +131,9 @@ impl TableRowFlow {
         }
         self.box_ = None;
         self.float = None;
+        self.col_widths = ~[];
+        self.col_min_widths = ~[];
+        self.col_pref_widths = ~[];
     }
 
     // inline(always) because this is only ever called by in-order or non-in-order top-level
@@ -129,22 +146,6 @@ impl TableRowFlow {
         let mut bottom_offset = Au::new(0);
         let mut left_offset = Au::new(0);
         let mut float_ctx = Invalid;
-
-        for box_ in self.box_.iter() {
-            clearance = match box_.clear() {
-                None => Au::new(0),
-                Some(clear) => {
-                    self.base.floats_in.clearance(clear)
-                }
-            };
-
-            top_offset = clearance + box_.margin.get().top + box_.border.get().top +
-                box_.padding.get().top;
-            cur_y = cur_y + top_offset;
-            bottom_offset = box_.margin.get().bottom + box_.border.get().bottom +
-                box_.padding.get().bottom;
-            left_offset = box_.offset();
-        }
 
         if inorder {
             // Floats for blocks work like this:
@@ -169,52 +170,20 @@ impl TableRowFlow {
         let mut top_margin_collapsible = false;
         let mut bottom_margin_collapsible = false;
         let mut first_in_flow = true;
-        for box_ in self.box_.iter() {
-            if box_.border.get().top == Au(0) && box_.padding.get().top == Au(0) {
-                collapsible = box_.margin.get().top;
-                top_margin_collapsible = true;
-            }
-            if box_.border.get().bottom == Au(0) &&
-                    box_.padding.get().bottom == Au(0) {
-                bottom_margin_collapsible = true;
-            }
-            margin_top = box_.margin.get().top;
-            margin_bottom = box_.margin.get().bottom;
-        }
 
         let mut max_y = Au::new(0);
         for kid in self.base.child_iter() {
-            kid.collapse_margins(top_margin_collapsible,
-                                 &mut first_in_flow,
-                                 &mut margin_top,
-                                 &mut top_offset,
-                                 &mut collapsing,
-                                 &mut collapsible);
-
             let child_node = flow::mut_base(*kid);
-            cur_y = cur_y - collapsing;
             child_node.position.origin.y = cur_y;
             max_y = geometry::max(max_y, child_node.position.size.height);
         }
-        cur_y = cur_y + max_y;
-
-        // The bottom margin collapses with its last in-flow block-level child's bottom margin
-        // if the parent has no bottom boder, no bottom padding.
-        collapsing = if bottom_margin_collapsible {
-            if margin_bottom < collapsible {
-                margin_bottom = collapsible;
-            }
-            collapsible
-        } else {
-            Au::new(0)
-        };
 
         // TODO: A box's own margins collapse if the 'min-height' property is zero, and it has neither
         // top or bottom borders nor top or bottom padding, and it has a 'height' of either 0 or 'auto',
         // and it does not contain a line box, and all of its in-flow children's margins (if any) collapse.
 
 
-        let mut height = cur_y - top_offset - collapsing;
+        let mut height = max_y;
 
         for box_ in self.box_.iter() {
             let style = box_.style();
@@ -232,17 +201,9 @@ impl TableRowFlow {
         let screen_height = ctx.screen_size.height;
         for box_ in self.box_.iter() {
             let mut position = box_.position.get();
-            let mut margin = box_.margin.get();
-
-            // The associated box is the border box of this flow.
-            margin.top = margin_top;
-            margin.bottom = margin_bottom;
-
-            noncontent_height = box_.padding.get().top + box_.padding.get().bottom +
-                box_.border.get().top + box_.border.get().bottom;
 
             let (y, h) = box_.get_y_coord_and_new_height_if_fixed(screen_height,
-                                                                 height, clearance + margin.top, self.is_fixed);
+                                                                 height, Au(0), self.is_fixed);
             position.origin.y = y;
             height = h;
 
@@ -259,10 +220,7 @@ impl TableRowFlow {
                 height + noncontent_height
             };
 
-            noncontent_height = noncontent_height + clearance + margin.top + margin.bottom;
-
             box_.position.set(position);
-            box_.margin.set(margin);
         }
 
         self.base.position.size.height = if self.is_fixed {
@@ -270,6 +228,17 @@ impl TableRowFlow {
         } else {
             height + noncontent_height
         };
+
+        cur_y = cur_y + height;
+        for kid in self.base.child_iter() {
+            for kid_box_ in kid.as_table_cell().box_.iter() {
+                let mut position = kid_box_.position.get();
+                position.size.height = height;
+                kid_box_.position.set(position);
+            }
+            let child_node = flow::mut_base(*kid);
+            child_node.position.size.height = max_y;
+        }
 
         if inorder {
             let extra_height = height - (cur_y - top_offset) + bottom_offset;
@@ -458,8 +427,10 @@ impl Flow for TableRowFlow {
             }
 
             let child_base = flow::mut_base(*kid);
-            min_width = geometry::max(min_width, child_base.min_width);
-            pref_width = geometry::max(pref_width, child_base.pref_width);
+            self.col_min_widths.push(child_base.min_width);
+            self.col_pref_widths.push(child_base.pref_width);
+            min_width = min_width + child_base.min_width;
+            pref_width = pref_width + child_base.pref_width;
             num_floats = num_floats + child_base.num_floats;
         }
 
@@ -470,16 +441,9 @@ impl Flow for TableRowFlow {
             self.base.num_floats = num_floats;
         }
 
-        /* if not an anonymous block context, add in block box's widths.
-           these widths will not include child elements, just padding etc. */
-        for box_ in self.box_.iter() {
-            let (this_minimum_width, this_preferred_width) = box_.minimum_and_preferred_widths();
-            min_width = min_width + this_minimum_width;
-            pref_width = pref_width + this_preferred_width;
-        }
-
         self.base.min_width = min_width;
-        self.base.pref_width = pref_width;
+        self.base.pref_width = geometry::max(min_width, pref_width);
+        println!(" ROW{:?} {:?} {:?}", self.debug_str(), self.col_min_widths, self.col_pref_widths);
     }
 
     /// Recursively (top-down) determines the actual width of child contexts and boxes. When called

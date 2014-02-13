@@ -66,6 +66,12 @@ pub struct TableFlow {
     /// Column widths
     col_widths: ~[Au],
 
+    /// Column min widths
+    col_min_widths: ~[Au],
+
+    /// Column pref widths
+    col_pref_widths: ~[Au],
+
     /// Table-layout property
     is_fixed_table_layout: bool,
 }
@@ -78,6 +84,8 @@ impl TableFlow {
             is_fixed: false,
             float: None,
             col_widths: ~[],
+            col_min_widths: ~[],
+            col_pref_widths: ~[],
             is_fixed_table_layout: false,
 
         }
@@ -91,6 +99,8 @@ impl TableFlow {
             is_fixed: is_fixed,
             float: None,
             col_widths: ~[],
+            col_min_widths: ~[],
+            col_pref_widths: ~[],
             is_fixed_table_layout: is_fixed_table_layout,
         }
     }
@@ -102,6 +112,8 @@ impl TableFlow {
             is_fixed: false,
             float: Some(~FloatedTableInfo::new(float_type)),
             col_widths: ~[],
+            col_min_widths: ~[],
+            col_pref_widths: ~[],
             is_fixed_table_layout: false,
         }
     }
@@ -113,6 +125,8 @@ impl TableFlow {
             is_fixed: false,
             float: Some(~FloatedTableInfo::new(float_type)),
             col_widths: ~[],
+            col_min_widths: ~[],
+            col_pref_widths: ~[],
             is_fixed_table_layout: false,
         }
     }
@@ -127,6 +141,164 @@ impl TableFlow {
         }
         self.box_ = None;
         self.float = None;
+        self.col_widths = ~[];
+        self.col_min_widths = ~[];
+        self.col_pref_widths = ~[];
+    }
+
+    fn bubble_widths_fixed_layout(&mut self) {
+        let mut min_width = Au::new(0);
+        let mut pref_width = Au::new(0);
+        let mut num_floats = 0;
+        let mut first_row = false;
+
+        /* find max width from child block contexts */
+        for kid in self.base.child_iter() {
+            assert!(kid.is_proper_table_child());
+
+            if kid.is_table_colgroup() {
+                self.col_widths.push_all(kid.as_table_colgroup().widths);
+            } else if kid.is_table_rowgroup() || kid.is_table_row() {
+                // read column widths from table-row-group, and assign
+                // width=0 for the columns not defined in column-group
+                // FIXME: need to read widths from either table-header-group OR
+                // first table-row
+                let kid_col_widths = if kid.is_table_rowgroup() {
+                    &kid.as_table_rowgroup().col_widths
+                } else {
+                    &kid.as_table_row().col_widths
+                };
+                if !first_row {
+                    first_row = true;
+                    let mut child_widths = kid_col_widths.iter();
+                    for col_width in self.col_widths.mut_iter() {
+                        match child_widths.next() {
+                            Some(child_width) => {
+                                if *col_width == Au::new(0) {
+                                    *col_width = *child_width;
+                                }
+                            },
+                            None => break
+                        }
+                    }
+                } 
+                let num_child_cols = kid_col_widths.len();
+                let num_cols = self.col_widths.len();
+                debug!("{:?} column(s) from colgroup, but the child has {:?} column(s)", num_cols, num_child_cols);
+                for i in range(num_cols, num_child_cols) {
+                    self.col_widths.push( kid_col_widths[i] );
+                }
+            }
+
+            let child_base = flow::mut_base(*kid);
+            num_floats = num_floats + child_base.num_floats;
+        }
+
+        if self.is_float() {
+            self.base.num_floats = 1;
+            self.float.get_mut_ref().floated_children = num_floats;
+        } else {
+            self.base.num_floats = num_floats;
+        }
+    }
+
+    fn bubble_widths_auto_layout(&mut self) {
+        let mut min_width = Au::new(0);
+        let mut pref_width = Au::new(0);
+        let mut num_floats = 0;
+
+        /* find max width from child block contexts */
+        for kid in self.base.child_iter() {
+            assert!(kid.is_proper_table_child());
+
+            if kid.is_table_colgroup() {
+                self.col_min_widths.push_all(kid.as_table_colgroup().min_widths);
+                self.col_pref_widths.push_all(kid.as_table_colgroup().widths);
+            } else if kid.is_table_rowgroup() || kid.is_table_row() {
+                // read column widths from table-row-group, and assign
+                // width=0 for the columns not defined in column-group
+                // FIXME: need to read widths from either table-header-group OR
+                // first table-row
+                {
+                    min_width = Au(0);
+                    pref_width = Au(0);
+                    let kid_min = if kid.is_table_rowgroup() {
+                        &kid.as_table_rowgroup().col_min_widths
+                    } else {
+                        &kid.as_table_row().col_min_widths
+                    };
+                    let mut kid_min_widths = kid_min.iter();
+                    for col_min_width in self.col_min_widths.mut_iter() {
+                        match kid_min_widths.next() {
+                            Some(kid_min_width) => {
+                                if *col_min_width < *kid_min_width {
+                                    *col_min_width = *kid_min_width;
+                                }
+                            }
+                            None => {}
+                        }
+                        min_width = min_width + *col_min_width;
+                    }
+                    let num_child_cols = kid_min_widths.len();
+                    let num_cols = self.col_min_widths.len();
+                    debug!("{:?} column(s) from colgroup, but the child has {:?} column(s)", num_cols, num_child_cols);
+                    for i in range(num_cols, num_child_cols) {
+                        self.col_min_widths.push( kid_min[i] );
+                        min_width = min_width + kid_min[i];
+                    }
+                }
+                {
+                    let kid_pref = if kid.is_table_rowgroup() {
+                        &kid.as_table_rowgroup().col_pref_widths
+                    } else {
+                        &kid.as_table_row().col_pref_widths
+                    };
+                    let mut kid_pref_widths = kid_pref.iter();
+                    for col_pref_width in self.col_pref_widths.mut_iter() {
+                        match kid_pref_widths.next() {
+                            Some(kid_pref_width) => {
+                                if *col_pref_width < *kid_pref_width {
+                                    *col_pref_width = *kid_pref_width;
+                                }
+                            }
+                            None => {}
+                        }
+                        pref_width = pref_width + *col_pref_width;
+                    }
+                    let num_child_cols = kid_pref_widths.len();
+                    let num_cols = self.col_pref_widths.len();
+                    debug!("{:?} column(s) from colgroup, but the child has {:?} column(s)", num_cols, num_child_cols);
+                    for i in range(num_cols, num_child_cols) {
+                        self.col_pref_widths.push( kid_pref[i] );
+                        pref_width = pref_width + kid_pref[i];
+                    }
+                }
+            }
+
+            let child_base = flow::mut_base(*kid);
+            num_floats = num_floats + child_base.num_floats;
+        }
+
+        if self.is_float() {
+            self.base.num_floats = 1;
+            self.float.get_mut_ref().floated_children = num_floats;
+        } else {
+            self.base.num_floats = num_floats;
+        }
+
+        /* if not an anonymous block context, add in block box's widths.
+           these widths will not include child elements, just padding etc. */
+        for box_ in self.box_.iter() {
+            {
+                // Can compute border width here since it doesn't depend on anything.
+                box_.compute_borders(box_.style())
+            }
+        }
+
+        self.base.min_width = min_width;
+        self.base.pref_width = geometry::max(min_width, pref_width);
+
+        println!(" TABLE{:?} {:?} {:?}", self.debug_str(), self.base.min_width, self.base.pref_width);
     }
 
     // inline(always) because this is only ever called by in-order or non-in-order top-level
@@ -455,77 +627,11 @@ impl Flow for TableFlow {
     /* TODO: absolute contexts */
     /* TODO: inline-blocks */
     fn bubble_widths(&mut self, _: &mut LayoutContext) {
-        let mut min_width = Au::new(0);
-        let mut pref_width = Au::new(0);
-        let mut num_floats = 0;
-        let mut first_row = false;
-
-        /* find max width from child block contexts */
-        for kid in self.base.child_iter() {
-            assert!(kid.is_proper_table_child());
-
-            if kid.is_table_colgroup() {
-                self.col_widths.push_all(kid.as_table_colgroup().widths);
-            } else if kid.is_table_rowgroup() || kid.is_table_row() {
-                // read column widths from table-row-group, and assign
-                // width=0 for the columns not defined in column-group
-                // FIXME: need to read widths from either table-header-group OR
-                // first table-row
-                let kid_col_widths = if kid.is_table_rowgroup() {
-                    &kid.as_table_rowgroup().col_widths
-                } else {
-                    &kid.as_table_row().col_widths
-                };
-                if self.is_fixed_table_layout && !first_row {
-                    first_row = true;
-                    let mut child_widths = kid_col_widths.iter();
-                    for col_width in self.col_widths.mut_iter() {
-                        match child_widths.next() {
-                            Some(child_width) => {
-                                if *col_width == Au::new(0) {
-                                    *col_width = *child_width;
-                                }
-                            },
-                            None => break
-                        }
-                    }
-                }
-                let num_child_cols = kid_col_widths.len();
-                let num_cols = self.col_widths.len();
-                debug!("{:?} column(s) from colgroup, but the child has {:?} column(s)", num_cols, num_child_cols);
-                for i in range(num_cols, num_child_cols) {
-                    self.col_widths.push( kid_col_widths[i] );
-                }
-            }
-
-            let child_base = flow::mut_base(*kid);
-            min_width = geometry::max(min_width, child_base.min_width);
-            pref_width = geometry::max(pref_width, child_base.pref_width);
-            num_floats = num_floats + child_base.num_floats;
-        }
-
-        if self.is_float() {
-            self.base.num_floats = 1;
-            self.float.get_mut_ref().floated_children = num_floats;
+        if self.is_fixed_table_layout {
+            self.bubble_widths_fixed_layout();
         } else {
-            self.base.num_floats = num_floats;
+            self.bubble_widths_auto_layout();
         }
-
-        /* if not an anonymous block context, add in block box's widths.
-           these widths will not include child elements, just padding etc. */
-        for box_ in self.box_.iter() {
-            {
-                // Can compute border width here since it doesn't depend on anything.
-                box_.compute_borders(box_.style())
-            }
-
-            let (this_minimum_width, this_preferred_width) = box_.minimum_and_preferred_widths();
-            min_width = min_width + this_minimum_width;
-            pref_width = pref_width + this_preferred_width;
-        }
-
-        self.base.min_width = min_width;
-        self.base.pref_width = pref_width;
     }
 
     /// Recursively (top-down) determines the actual width of child contexts and boxes. When called
@@ -546,14 +652,16 @@ impl Flow for TableFlow {
         let mut remaining_width = self.base.position.size.width;
         let mut x_offset = Au::new(0);
 
-        let mut num_unspecified_widths = 0;
-        let mut total_cell_widths = Au::new(0);
-        for col_width in self.col_widths.iter() {
-            if *col_width == Au::new(0) {
-                num_unspecified_widths += 1;
-            } else {
-                total_cell_widths = total_cell_widths.add(col_width);
-            }
+        println!("WW {:?} {:?} {:?}", remaining_width, self.base.min_width, self.base.pref_width); 
+        //let sum = self.col_min_widths.iter().fold(0, |a, &b| a+*b);
+        if remaining_width == self.base.min_width {
+            self.col_widths = self.col_min_widths.clone();
+        } else if remaining_width == self.base.pref_width {
+            self.col_widths = self.col_pref_widths.clone();
+        } else {
+            let diff = remaining_width - self.base.min_width;
+            let cell_len = self.col_min_widths.len() as f64;
+            self.col_widths = self.col_min_widths.map(|width| width + diff.scale_by(1.0/cell_len));
         }
 
         if self.is_float() {
@@ -599,6 +707,16 @@ impl Flow for TableFlow {
         }
 
         remaining_width = remaining_width - padding_and_borders;
+
+        let mut num_unspecified_widths = 0;
+        let mut total_cell_widths = Au::new(0);
+        for col_width in self.col_widths.iter() {
+            if *col_width == Au::new(0) {
+                num_unspecified_widths += 1;
+            } else {
+                total_cell_widths = total_cell_widths.add(col_width);
+            }
+        }
 
         let final_cell_width = if (total_cell_widths < remaining_width) &&
                                     (num_unspecified_widths == 0) {

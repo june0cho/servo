@@ -23,6 +23,9 @@ pub struct TableColGroupFlow {
 
     /// The specified widths of table columns
     widths: ~[Au],
+
+    /// The min widths of table columns
+    min_widths: ~[Au],
 }
 
 impl TableColGroupFlow {
@@ -32,6 +35,7 @@ impl TableColGroupFlow {
             box_: None,
             cols: ~[],
             widths: ~[],
+            min_widths: ~[],
         }
     }
 
@@ -41,6 +45,7 @@ impl TableColGroupFlow {
             box_: Some(box_),
             cols: boxes,
             widths: ~[],
+            min_widths: ~[],
         }
     }
 
@@ -51,6 +56,7 @@ impl TableColGroupFlow {
         self.box_ = None;
         self.cols = ~[];
         self.widths = ~[];
+        self.min_widths = ~[];
     }
 }
 
@@ -64,14 +70,21 @@ impl Flow for TableColGroupFlow {
     }
 
     fn bubble_widths(&mut self, _: &mut LayoutContext) {
+        let mut col_group_width = Au(0);
+        for box_ in self.box_.iter() {
+            col_group_width = MaybeAuto::from_style(box_.style().Box.width, Au::new(0)).specified_or_zero();
+        }
         for box_ in self.cols.iter() {
             // get the specified value from width property
-            let width = MaybeAuto::from_style(box_.style().Box.width, Au::new(0)).specified_or_zero();
+            let mut width = MaybeAuto::from_style(box_.style().Box.width, Au::new(0)).specified_or_zero();
 
             let span:int = match box_.specific {
                 TableColumnBox(col_box) => col_box.span.unwrap_or(1),
                 _ => fail!("Other box come out in TableColGroupFlow. {:?}", box_.specific)
             };
+            if col_group_width > width {
+                width = col_group_width;
+            }
             for _ in range(0, span) {
                 self.widths.push(width);
             }
